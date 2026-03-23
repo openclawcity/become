@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { TrustManager } from '../../src/skills/trust.js';
@@ -71,5 +71,42 @@ describe('TrustManager', () => {
     trust.setDefault('trusted');
     expect(trust.getLevel('new-agent')).toBe('trusted');
     expect(trust.getConfig().default).toBe('trusted');
+  });
+
+  // Bug #6: corrupt trust config
+  it('handles corrupt trust.json gracefully', () => {
+    // Write corrupt JSON
+    writeFileSync(join(dir, 'trust.json'), '{"trusted": "not-an-array", "blocked": 42}', 'utf-8');
+    const trust2 = new TrustManager(dir);
+    // Should not crash, should default
+    expect(trust2.getLevel('any-agent')).toBe('pending');
+    expect(trust2.getConfig().trusted).toEqual([]);
+    expect(trust2.getConfig().blocked).toEqual([]);
+  });
+
+  it('handles completely invalid JSON in trust.json', () => {
+    writeFileSync(join(dir, 'trust.json'), 'not json at all!!!', 'utf-8');
+    const trust2 = new TrustManager(dir);
+    expect(trust2.getLevel('any-agent')).toBe('pending');
+  });
+
+  it('filters non-string entries from trust arrays', () => {
+    writeFileSync(join(dir, 'trust.json'), JSON.stringify({
+      trusted: ['agent-1', 42, null, 'agent-2'],
+      blocked: [true, 'agent-spam'],
+      default: 'pending',
+    }), 'utf-8');
+    const trust2 = new TrustManager(dir);
+    const config = trust2.getConfig();
+    expect(config.trusted).toEqual(['agent-1', 'agent-2']);
+    expect(config.blocked).toEqual(['agent-spam']);
+  });
+
+  it('handles invalid default value in trust.json', () => {
+    writeFileSync(join(dir, 'trust.json'), JSON.stringify({
+      trusted: [], blocked: [], default: 'invalid_value',
+    }), 'utf-8');
+    const trust2 = new TrustManager(dir);
+    expect(trust2.getConfig().default).toBe('pending');
   });
 });

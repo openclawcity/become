@@ -63,6 +63,44 @@ describe('detectAgentConversation', () => {
     ]);
     expect(result.isAgentToAgent).toBe(false);
   });
+
+  // Bug #4: false positives on building pattern
+  it('does NOT false-positive on "Write code in Python: ..."', () => {
+    const result = detectAgentConversation([
+      { role: 'user', content: 'Write code in Python: print("hello")' },
+    ]);
+    expect(result.isAgentToAgent).toBe(false);
+  });
+
+  it('does NOT false-positive on "Help me in the morning: ..."', () => {
+    const result = detectAgentConversation([
+      { role: 'user', content: 'Help me in the morning: plan my day' },
+    ]);
+    expect(result.isAgentToAgent).toBe(false);
+  });
+
+  it('does NOT false-positive on "Explain in detail: ..."', () => {
+    const result = detectAgentConversation([
+      { role: 'user', content: 'Explain in detail: how does TCP work' },
+    ]);
+    expect(result.isAgentToAgent).toBe(false);
+  });
+
+  it('still detects agent-like IDs with hyphens in building format', () => {
+    const result = detectAgentConversation([
+      { role: 'user', content: 'agent-builder in Research Lab: The methodology looks solid' },
+    ]);
+    expect(result.isAgentToAgent).toBe(true);
+    expect(result.otherAgentId).toBe('agent-builder');
+  });
+
+  it('still detects agent-like IDs with underscores in building format', () => {
+    const result = detectAgentConversation([
+      { role: 'user', content: 'my_agent in Observatory: Starting research' },
+    ]);
+    expect(result.isAgentToAgent).toBe(true);
+    expect(result.otherAgentId).toBe('my_agent');
+  });
 });
 
 describe('extractExchangeText', () => {

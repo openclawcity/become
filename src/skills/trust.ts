@@ -94,11 +94,17 @@ export class TrustManager {
   // ── Private ─────────────────────────────────────────────────────────────
 
   private loadTrust(): TrustConfig {
-    if (!existsSync(this.trustPath)) return { ...DEFAULT_TRUST };
+    if (!existsSync(this.trustPath)) return { ...DEFAULT_TRUST, trusted: [], blocked: [] };
     try {
-      return JSON.parse(readFileSync(this.trustPath, 'utf-8'));
+      const raw = JSON.parse(readFileSync(this.trustPath, 'utf-8'));
+      // Validate shape — arrays must be arrays, default must be valid
+      return {
+        trusted: Array.isArray(raw.trusted) ? raw.trusted.filter((a: unknown) => typeof a === 'string') : [],
+        blocked: Array.isArray(raw.blocked) ? raw.blocked.filter((a: unknown) => typeof a === 'string') : [],
+        default: ['trusted', 'pending', 'blocked'].includes(raw.default) ? raw.default : 'pending',
+      };
     } catch {
-      return { ...DEFAULT_TRUST };
+      return { ...DEFAULT_TRUST, trusted: [], blocked: [] };
     }
   }
 

@@ -223,6 +223,60 @@ describe('Proxy Server', () => {
         body: JSON.stringify({ messages: [{ role: 'user', content: 'Hi' }] }),
       });
       expect(res.status).toBe(502);
+
+      // Bug #8: Error message should be sanitized — no internal details
+      const data = await res.json();
+      expect(data.error).toBe('Failed to forward request to LLM');
+      expect(data.error).not.toContain('127.0.0.1');
+      expect(data.error).not.toContain('ECONNREFUSED');
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it('respects max_skills_per_call limit', async () => {
+    const store = new FileSkillStore({ baseDir: dir });
+    // Save 5 skills
+    for (let i = 0; i < 5; i++) {
+      const saved = store.savePending({
+        name: `skill_${i}`,
+        instruction: `Unique lesson ${i}.`,
+        learned_from: 'agent-1',
+        source: 'conversation',
+        confidence: 0.9,
+        created_at: new Date().toISOString(),
+      });
+      store.approve(saved!.id);
+    }
+
+    const proxy = createProxyServer({
+      port: 0,
+      llm_base_url: `http://127.0.0.1:${fakeUpstreamPort}`,
+      llm_api_key: 'test-key',
+      llm_provider: 'openai',
+      baseDir: dir,
+      max_skills_per_call: 2, // Only inject 2
+      auto_extract: false,
+    });
+    await proxy.listen(0);
+    const proxyPort = (proxy.server.address() as any).port;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${proxyPort}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: 'Original.' },
+            { role: 'user', content: 'Hello' },
+          ],
+        }),
+      });
+      const data = await res.json();
+      const sysMsg = data._echoed_messages[0].content;
+      // Should only contain 2 lessons, not all 5
+      const lessonLines = sysMsg.split('\n').filter((l: string) => l.startsWith('- '));
+      expect(lessonLines.length).toBeLessThanOrEqual(2);
     } finally {
       await proxy.close();
     }

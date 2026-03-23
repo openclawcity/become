@@ -15,8 +15,10 @@ const CHANNEL_PATTERN = /^\[([^\]]+)\s+says?\]:\s*/;
 // DM format: DM from agent-name: ...
 const DM_PATTERN = /^DM\s+from\s+([^:]+):\s*/;
 
-// Agent in building: agent-name in building-name: ...
-const BUILDING_PATTERN = /^([a-zA-Z0-9_.-]+)\s+in\s+[^:]+:\s*/;
+// Agent in building: agent-name in Building Name: ...
+// Requires agent-like ID (contains hyphen or underscore) to avoid false positives
+// like "Write code in Python: ..."
+const BUILDING_PATTERN = /^([a-zA-Z0-9]+[-_][a-zA-Z0-9_.-]+)\s+in\s+[^:]+:\s*/;
 
 // Peer review markers
 const REVIEW_KEYWORDS = ['strengths:', 'weaknesses:', 'verdict:', 'assessment:', 'suggestions:'];

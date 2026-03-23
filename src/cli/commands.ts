@@ -3,6 +3,7 @@ import { createProxyServer, type ProxyConfig } from '../proxy/server.js';
 import { FileSkillStore } from '../skills/store.js';
 import { TrustManager } from '../skills/trust.js';
 import { patchOpenClaw, restoreOpenClaw } from './adapter/openclaw.js';
+// Note: FileSkillStore and TrustManager still needed for showStatus()
 import { patchIronClaw, restoreIronClaw } from './adapter/ironclaw.js';
 import { patchNanoClaw, restoreNanoClaw } from './adapter/nanoclaw.js';
 
@@ -23,11 +24,10 @@ export async function start(): Promise<void> {
   const proxy = createProxyServer(proxyConfig);
   await proxy.listen();
 
-  const store = new FileSkillStore({ baseDir });
-  const trust = new TrustManager(baseDir);
-  const approved = store.listApproved().length;
-  const pending = store.listPending().length;
-  const trustConfig = trust.getConfig();
+  // Use the proxy's store/trust instances — don't create duplicates
+  const approved = proxy.store.listApproved().length;
+  const pending = proxy.store.listPending().length;
+  const trustConfig = proxy.trust.getConfig();
 
   console.log(`\nbecome proxy running on localhost:${config.proxy_port}`);
   console.log(`\nSkills loaded: ${approved} approved, ${pending} pending`);

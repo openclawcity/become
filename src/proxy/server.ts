@@ -4,6 +4,7 @@ import { TrustManager } from '../skills/trust.js';
 import { formatSkillsForInjection, injectSkillsIntoMessages } from '../skills/format.js';
 import { LessonExtractor } from './extractor.js';
 import type { ConversationAnalyzer } from '../learn/agent-conversations.js';
+import type { SkillFile } from '../skills/store.js';
 
 export interface ProxyConfig {
   port: number;
@@ -22,6 +23,8 @@ export interface ProxyStats {
   started_at: string;
 }
 
+const SKILL_CACHE_TTL_MS = 5000; // Refresh skill cache every 5 seconds
+
 export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAnalyzer) {
   const store = new FileSkillStore({ baseDir: config.baseDir });
   const trust = new TrustManager(config.baseDir);
@@ -33,6 +36,19 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
     lessons_extracted: 0,
     started_at: new Date().toISOString(),
   };
+
+  // Skill cache — avoid reading disk on every request
+  let cachedSkills: SkillFile[] = [];
+  let cacheTimestamp = 0;
+
+  function getSkills(): SkillFile[] {
+    const now = Date.now();
+    if (now - cacheTimestamp > SKILL_CACHE_TTL_MS) {
+      cachedSkills = store.listApproved();
+      cacheTimestamp = now;
+    }
+    return cachedSkills;
+  }
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     // Health check
@@ -60,8 +76,8 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
       // Extract messages for injection
       const messages = body.messages;
       if (Array.isArray(messages)) {
-        // Inject approved skills
-        const skills = store.listApproved().slice(0, config.max_skills_per_call);
+        // Inject approved skills from cache
+        const skills = getSkills().slice(0, config.max_skills_per_call);
         if (skills.length > 0) {
           const skillText = formatSkillsForInjection(skills);
           injectSkillsIntoMessages(messages, skillText);
@@ -69,7 +85,7 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
         }
       }
 
-      // Build upstream URL
+      // Build upstream URL — always match the incoming format
       const upstreamUrl = buildUpstreamUrl(config, req.url!);
 
       // Build upstream headers
@@ -87,29 +103,33 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
 
       stats.requests_forwarded++;
 
-      // Forward response headers
-      res.writeHead(upstreamRes.status, Object.fromEntries(upstreamRes.headers.entries()));
+      // Forward response headers (filter out transfer-encoding to avoid mismatch)
+      const responseHeaders: Record<string, string> = {};
+      upstreamRes.headers.forEach((value, key) => {
+        if (key.toLowerCase() !== 'transfer-encoding') {
+          responseHeaders[key] = value;
+        }
+      });
+      res.writeHead(upstreamRes.status, responseHeaders);
 
       if (isStreaming && upstreamRes.body) {
-        // Stream: pipe chunks directly, collect for extraction
+        // Stream: pipe chunks directly to client — do NOT buffer
         const reader = upstreamRes.body.getReader();
-        const chunks: Uint8Array[] = [];
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             res.write(value);
-            if (config.auto_extract && extractor) chunks.push(value);
           }
         } finally {
           res.end();
         }
 
-        // Async extraction from streamed response
+        // Async extraction — uses request messages only, not the response
         if (config.auto_extract && extractor && Array.isArray(messages)) {
-          const responseText = new TextDecoder().decode(concatUint8Arrays(chunks));
-          extractor.extract(messages).catch(() => {});
-          stats.lessons_extracted++;
+          extractor.extract(messages)
+            .then(() => { stats.lessons_extracted++; })
+            .catch(() => {});
         }
       } else {
         // Non-streaming: read full response, return it, then extract
@@ -118,16 +138,22 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
 
         // Async extraction
         if (config.auto_extract && extractor && Array.isArray(messages)) {
-          extractor.extract(messages).catch(() => {});
-          stats.lessons_extracted++;
+          extractor.extract(messages)
+            .then(() => { stats.lessons_extracted++; })
+            .catch(() => {});
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Internal proxy error';
+      // Sanitize error — never leak upstream details to client
+      const safeMessage = err instanceof Error && err.message === 'Request body too large'
+        ? 'Request body too large'
+        : 'Failed to forward request to LLM';
+
       if (!res.headersSent) {
         res.writeHead(502, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: message }));
       }
+      // Always end the response, even if headers were already sent
+      res.end(JSON.stringify({ error: safeMessage }));
     }
   });
 
@@ -168,18 +194,12 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function buildUpstreamUrl(config: ProxyConfig, path: string): string {
-  let base = config.llm_base_url.replace(/\/+$/, '');
+  const base = config.llm_base_url.replace(/\/+$/, '');
 
-  if (config.llm_provider === 'anthropic' && path === '/v1/messages') {
-    // Anthropic API endpoint
-    return `${base}/v1/messages`;
-  }
-  if (config.llm_provider === 'anthropic' && path === '/v1/chat/completions') {
-    // Agent using OpenAI format but provider is Anthropic — forward to messages
-    return `${base}/v1/messages`;
-  }
-
-  // OpenAI-compatible
+  // Forward to the matching upstream endpoint.
+  // If agent sends /v1/messages → forward to /v1/messages (Anthropic format)
+  // If agent sends /v1/chat/completions → forward to /v1/chat/completions (OpenAI format)
+  // The agent is responsible for using the correct format for its provider.
   return `${base}${path}`;
 }
 
@@ -208,15 +228,4 @@ function buildUpstreamHeaders(
   if (typeof accept === 'string') headers['Accept'] = accept;
 
   return headers;
-}
-
-function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
-  const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const arr of arrays) {
-    result.set(arr, offset);
-    offset += arr.length;
-  }
-  return result;
 }
