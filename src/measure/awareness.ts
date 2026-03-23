@@ -1,4 +1,4 @@
-import type { AwarenessScore, StorageAdapter } from '../core/types.js';
+import type { AwarenessScore } from '../core/types.js';
 import { validateAgentId } from '../core/validation.js';
 
 /**
@@ -49,8 +49,6 @@ const DIMENSION_WEIGHTS = {
 } as const;
 
 export class AwarenessIndex {
-  constructor(private adapter: StorageAdapter) {}
-
   /** Compute awareness score from raw input signals */
   compute(agentId: string, input: AwarenessInput): AwarenessScore {
     validateAgentId(agentId);

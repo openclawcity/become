@@ -157,7 +157,7 @@ export class NormDetector {
 
     const activitySummary = activity
       .slice(0, 200) // Cap for prompt size
-      .map((a) => `[${a.agent_name}] ${a.action}: ${truncate(a.content ?? '', 150)}${a.tags?.length ? ` (tags: ${a.tags.join(', ')})` : ''}`)
+      .map((a) => `[${sanitize(a.agent_name)}] ${sanitize(a.action)}: ${sanitize(truncate(a.content ?? '', 150))}${a.tags?.length ? ` (tags: ${a.tags.slice(0, 10).map(sanitize).join(', ')})` : ''}`)
       .join('\n');
 
     const recentTitlesList = [...existingTitles].slice(0, 20).join(', ');
@@ -244,7 +244,7 @@ Rules:
           : [];
 
         const norm: CulturalNorm = {
-          id: crypto.randomUUID(),
+          id: generateId(),
           title: raw.title.slice(0, 200),
           description: raw.description.slice(0, 2000),
           category: normalizeCategory(typeof raw.category === 'string' ? raw.category : ''),
@@ -269,4 +269,20 @@ Rules:
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 3) + '...';
+}
+
+function sanitize(text: string): string {
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/```/g, "'''");
+}
+
+function generateId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    // Fallback for environments without crypto.randomUUID
+    const hex = () => Math.random().toString(16).slice(2, 10);
+    return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${hex()}-${hex()}${hex()}${hex()}`;
+  }
 }

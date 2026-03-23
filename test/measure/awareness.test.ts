@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { AwarenessIndex } from '../../src/measure/awareness.js';
-import { MemoryStore } from '../../src/adapters/memory.js';
 import type { AwarenessInput } from '../../src/measure/awareness.js';
 
-const store = new MemoryStore();
-const index = new AwarenessIndex(store);
+const index = new AwarenessIndex();
 
 const EMPTY_INPUT: AwarenessInput = {
   peer_review_count: 0, teaching_events: 0, collaboration_count: 0, follower_count: 0,

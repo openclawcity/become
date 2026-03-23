@@ -137,6 +137,27 @@ describe('diff', () => {
     expect(d.skills_degraded).toHaveLength(1);
     expect(d.skills_degraded[0].delta).toBe(-10);
   });
+
+  it('detects lost skills', () => {
+    const before: GrowthSnapshot = {
+      agent_id: 'a', timestamp: '2026-01-01T00:00:00Z',
+      skills: [makeScore('coding', 30), makeScore('testing', 20)],
+      total_artifacts: 0, total_collaborations: 0, total_peer_reviews: 0,
+      reputation: 0,
+      dreyfus_distribution: { novice: 0, beginner: 2, competent: 0, proficient: 0, expert: 0 },
+      blooms_distribution: { remember: 0, understand: 0, apply: 2, analyze: 0, evaluate: 0, create: 0 },
+      learning_sources: { practice: 0, user_feedback: 0, peer_review: 0, observation: 0, teaching: 0, collaboration: 0 },
+    };
+
+    const after: GrowthSnapshot = {
+      ...before, timestamp: '2026-02-01T00:00:00Z',
+      skills: [makeScore('coding', 30)], // testing was removed
+    };
+
+    const d = tracker.diff(before, after);
+    expect(d.lost_skills).toContain('testing');
+    expect(d.lost_skills).not.toContain('coding');
+  });
 });
 
 describe('populationStats', () => {

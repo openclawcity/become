@@ -1,5 +1,5 @@
 import type { DreyfusStage, Score, SkillTrend, StorageAdapter } from '../core/types.js';
-import { dreyfusStage, nextMilestone, scoreTrend } from '../core/scorer.js';
+import { nextMilestone, scoreTrend } from '../core/scorer.js';
 import { validateAgentId } from '../core/validation.js';
 
 export interface TrendAnalysis {

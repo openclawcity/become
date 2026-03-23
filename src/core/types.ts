@@ -249,7 +249,7 @@ export interface GrowthDiff {
   skills_improved: { skill: string; delta: number }[];
   skills_degraded: { skill: string; delta: number }[];
   new_skills: string[];
-  milestones_earned: Milestone[];
+  lost_skills: string[];
   reputation_delta: number;
 }
 

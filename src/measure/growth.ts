@@ -1,6 +1,6 @@
 import type {
   BloomsLevel, DreyfusStage, GrowthDiff, GrowthSnapshot,
-  LearningSource, Milestone, Score, StorageAdapter,
+  LearningSource, Score, StorageAdapter,
 } from '../core/types.js';
 import { validateAgentId } from '../core/validation.js';
 
@@ -81,6 +81,7 @@ export class GrowthTracker {
     const improved: { skill: string; delta: number }[] = [];
     const degraded: { skill: string; delta: number }[] = [];
     const newSkills: string[] = [];
+    const lostSkills: string[] = [];
 
     for (const [skill, afterScore] of afterSkills) {
       const beforeScore = beforeSkills.get(skill);
@@ -93,6 +94,13 @@ export class GrowthTracker {
       }
     }
 
+    // Detect skills that were lost (present before but not after)
+    for (const skill of beforeSkills.keys()) {
+      if (!afterSkills.has(skill)) {
+        lostSkills.push(skill);
+      }
+    }
+
     const periodMs = new Date(after.timestamp).getTime() - new Date(before.timestamp).getTime();
     const periodDays = Math.max(1, Math.round(periodMs / (24 * 60 * 60 * 1000)));
 
@@ -101,18 +109,19 @@ export class GrowthTracker {
       skills_improved: improved.sort((a, b) => b.delta - a.delta),
       skills_degraded: degraded.sort((a, b) => a.delta - b.delta),
       new_skills: newSkills,
-      milestones_earned: [], // Would need milestone storage query — left for caller
+      lost_skills: lostSkills,
       reputation_delta: after.reputation - before.reputation,
     };
   }
 
   /** Compute population-level statistics from multiple agents' snapshots */
-  populationStats(snapshots: GrowthSnapshot[]): PopulationStats {
+  populationStats(snapshots: GrowthSnapshot[], periodDays = 30): PopulationStats {
     const allScores: Score[] = snapshots.flatMap((s) => s.skills);
     const scoreValues = allScores.map((s) => s.score);
 
+    const totalScore = scoreValues.reduce((a, b) => a + b, 0);
     const avg = scoreValues.length > 0
-      ? Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length)
+      ? Math.round(totalScore / scoreValues.length)
       : 0;
 
     const sorted = [...scoreValues].sort((a, b) => a - b);
@@ -135,10 +144,11 @@ export class GrowthTracker {
       teachingEvents += snap.learning_sources.teaching;
     }
 
-    // Learning velocity: avg score improvement per day
-    // Approximation: total score / total agents / avg age
-    const totalScore = scoreValues.reduce((a, b) => a + b, 0);
-    const velocity = snapshots.length > 0 ? totalScore / snapshots.length / 30 : 0; // assume ~30 days
+    // Learning velocity: avg score per agent per day over the given period
+    const safePeriod = Math.max(1, periodDays);
+    const velocity = snapshots.length > 0
+      ? totalScore / scoreValues.length / safePeriod
+      : 0;
 
     return {
       total_agents: snapshots.length,
@@ -148,7 +158,7 @@ export class GrowthTracker {
       skill_distribution: skillDist,
       stage_distribution: stageDist,
       teaching_events: teachingEvents,
-      cultural_norms: 0, // Would need norm query — set by caller
+      cultural_norms: 0, // Set by caller via norm query
       learning_velocity: Math.round(velocity * 100) / 100,
     };
   }
