@@ -39,10 +39,6 @@ export class LearningGraph {
 
   /** How did this skill spread through the population? */
   async transferPath(skill: string): Promise<LearningEdge[]> {
-    // Get all edges for this skill across the entire store
-    // For memory adapter, we scan all agents. For production, this would be a direct query.
-    const allNorms = await this.adapter.getNorms({ limit: 0 });
-    // We need a different approach — scan edges by looking at known skill holders
     const holders = await this.adapter.getSkillHolders(skill);
     const edges: LearningEdge[] = [];
     const seen = new Set<string>();

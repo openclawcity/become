@@ -34,10 +34,10 @@ export class SkillEvolver {
     const limited = failures.slice(0, MAX_FAILURES);
     const existingNames = new Set(existingSkills.map((s) => s.name));
 
-    // Build prompt
+    // Build prompt — sanitize user content to prevent prompt injection
     const failureDescriptions = limited.map((f, i) => {
       const patterns = f.score.failure_patterns?.join(', ') ?? 'unknown';
-      return `Failure ${i + 1}:\n  User: ${truncate(f.turn.user_message, 200)}\n  Agent: ${truncate(f.turn.agent_response, 200)}\n  Patterns: ${patterns}`;
+      return `Failure ${i + 1}:\n  User: ${sanitize(truncate(f.turn.user_message, 200))}\n  Agent: ${sanitize(truncate(f.turn.agent_response, 200))}\n  Patterns: ${patterns}`;
     }).join('\n\n');
 
     const existingList = existingSkills
@@ -81,20 +81,20 @@ Rules:
       if (!Array.isArray(parsed)) return [];
 
       return parsed
-        .filter((s: any) =>
-          typeof s.name === 'string' &&
-          typeof s.content === 'string' &&
-          s.name.length > 0 &&
-          s.name.length <= 100 &&
-          !existingNames.has(s.name),
-        )
+        .filter((s: any) => {
+          if (typeof s.name !== 'string' || typeof s.content !== 'string') return false;
+          if (s.name.length === 0 || s.name.length > 100) return false;
+          // Normalize BEFORE dedup check to prevent bypass
+          const normalized = s.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '');
+          return normalized.length > 0 && !existingNames.has(normalized);
+        })
         .slice(0, MAX_SKILLS_PER_EVOLUTION)
         .map((s: any) => ({
           name: s.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, ''),
-          category: typeof s.category === 'string' ? s.category : 'general',
+          category: typeof s.category === 'string' ? s.category.slice(0, 100) : 'general',
           content: String(s.content).slice(0, 2000),
           source: 'evolved' as const,
-          evolved_from: s.failure_patterns ?? [],
+          evolved_from: Array.isArray(s.failure_patterns) ? s.failure_patterns.slice(0, 10) : [],
         }));
     } catch {
       return [];
@@ -105,4 +105,12 @@ Rules:
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 3) + '...';
+}
+
+/** Strip characters that could be used for prompt injection */
+function sanitize(text: string): string {
+  // Remove control characters and common injection delimiters
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // control chars
+    .replace(/```/g, "'''"); // prevent code fence injection
 }

@@ -1,4 +1,5 @@
 import type { Score, Skill, StorageAdapter } from '../core/types.js';
+import { validateAgentId } from '../core/validation.js';
 
 const DEFAULT_MIN_AGE_DAYS = 14;
 const PROTECTED_STAGES = new Set(['competent', 'proficient', 'expert']);
@@ -10,8 +11,8 @@ export class SkillPruner {
    * Rules:
    * - Skill must be at least minAge days old
    * - Score has not improved (delta <= 0) over skill's lifetime → candidate
-   * - Auto-generated (source='evolved') + score degraded → strong candidate
-   * - Never prune skills at competent stage or above
+   * - Never prune skills at competent stage or above (proven useful)
+   * - Requires at least 2 score history points to judge trajectory
    */
   findIneffective(
     skills: Skill[],
@@ -49,6 +50,7 @@ export class SkillPruner {
 
   /** Remove identified skills */
   async prune(adapter: StorageAdapter, agentId: string, skillNames: string[]): Promise<number> {
+    validateAgentId(agentId);
     let removed = 0;
     for (const name of skillNames) {
       await adapter.deleteSkill(agentId, name);

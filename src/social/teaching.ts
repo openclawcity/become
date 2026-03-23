@@ -38,6 +38,10 @@ export class TeachingProtocol {
       throw new Error('Cannot teach yourself');
     }
 
+    if (!skill || skill.length > 100) {
+      throw new Error('Skill name is required and must be 100 chars or fewer');
+    }
+
     const now = new Date().toISOString();
     const edge: LearningEdge = {
       from_agent: teacher,

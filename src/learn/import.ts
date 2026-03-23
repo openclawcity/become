@@ -40,11 +40,16 @@ export function parseSkillFile(content: string): SkillInput | null {
   };
 }
 
+const MAX_RECURSION_DEPTH = 10;
+
 /**
  * Import skills from a directory of Markdown files.
  * Recursively scans for .md files with YAML frontmatter.
+ * Max recursion depth: 10 levels.
  */
-export function importSkillDirectory(dir: string): SkillInput[] {
+export function importSkillDirectory(dir: string, _depth = 0): SkillInput[] {
+  if (_depth > MAX_RECURSION_DEPTH) return [];
+
   const skills: SkillInput[] = [];
 
   let entries: string[];
@@ -65,8 +70,7 @@ export function importSkillDirectory(dir: string): SkillInput[] {
     }
 
     if (stat.isDirectory()) {
-      // Recurse into subdirectories
-      skills.push(...importSkillDirectory(fullPath));
+      skills.push(...importSkillDirectory(fullPath, _depth + 1));
     } else if (extname(entry) === '.md') {
       try {
         const content = readFileSync(fullPath, 'utf-8');

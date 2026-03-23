@@ -128,7 +128,6 @@ export class ConversationLearner {
     }
 
     const positive = scores.filter((s) => s.quality === 1).length;
-    const negative = scores.filter((s) => s.quality === -1).length;
     const total = scores.length;
     const successRate = total > 0 ? positive / total : 0;
 

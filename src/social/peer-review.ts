@@ -2,6 +2,9 @@ import type { LearningEdge, PeerReview, ReviewAssignment, ReviewVerdict, Storage
 import { validateAgentId } from '../core/validation.js';
 
 const MIN_ASSESSMENT_LENGTH = 100;
+const MAX_ASSESSMENT_LENGTH = 10000;
+const MAX_LIST_ITEMS = 20;
+const MAX_LIST_ITEM_LENGTH = 500;
 
 export class PeerReviewProtocol {
   constructor(private adapter: StorageAdapter) {}
@@ -45,7 +48,20 @@ export class PeerReviewProtocol {
       throw new Error('Review is too superficial: assessment must be at least 100 chars and include weaknesses');
     }
 
-    const saved = await this.adapter.savePeerReview(review);
+    if (review.overall_assessment.length > MAX_ASSESSMENT_LENGTH) {
+      throw new Error(`Assessment too long (max ${MAX_ASSESSMENT_LENGTH} chars)`);
+    }
+
+    // Sanitize list fields — cap length and item count
+    const sanitized: PeerReview = {
+      ...review,
+      overall_assessment: review.overall_assessment.slice(0, MAX_ASSESSMENT_LENGTH),
+      strengths: review.strengths.slice(0, MAX_LIST_ITEMS).map(s => s.slice(0, MAX_LIST_ITEM_LENGTH)),
+      weaknesses: review.weaknesses.slice(0, MAX_LIST_ITEMS).map(s => s.slice(0, MAX_LIST_ITEM_LENGTH)),
+      suggestions: review.suggestions.slice(0, MAX_LIST_ITEMS).map(s => s.slice(0, MAX_LIST_ITEM_LENGTH)),
+    };
+
+    const saved = await this.adapter.savePeerReview(sanitized);
 
     // Record learning for both parties
     await this.recordLearning(saved);
