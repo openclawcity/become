@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-// Re-export from new CLI entry point
-export { runSetup } from './setup.js';
-export { start, turnOn, turnOff, showStatus } from './commands.js';
-
-// When run directly, delegate to the new CLI
 import { runSetup } from './setup.js';
 import { start, turnOn, turnOff, showStatus } from './commands.js';
 
@@ -26,10 +21,6 @@ async function main() {
       break;
     case 'status':
       showStatus();
-      break;
-    case 'init':
-      // Legacy: init command for DB setup
-      console.log('The `init` command is no longer needed. Use `become setup` instead.');
       break;
     default:
       console.log(`

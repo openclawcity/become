@@ -89,6 +89,20 @@ export type { TrainConfig, TrainingResult } from './rl/train.js';
 export { TrainScheduler } from './rl/scheduler.js';
 export type { SchedulerConfig, SchedulerStatus } from './rl/scheduler.js';
 
+// Proxy
+export { createProxyServer } from './proxy/server.js';
+export type { ProxyConfig, ProxyStats } from './proxy/server.js';
+export { detectAgentConversation, extractExchangeText } from './proxy/detector.js';
+export type { DetectionResult } from './proxy/detector.js';
+export { LessonExtractor } from './proxy/extractor.js';
+
+// Skills (file-based)
+export { FileSkillStore } from './skills/store.js';
+export type { SkillFile, SkillStoreConfig } from './skills/store.js';
+export { formatSkillsForInjection, injectSkillsIntoMessages } from './skills/format.js';
+export { TrustManager } from './skills/trust.js';
+export type { TrustLevel, TrustConfig, RateLimits } from './skills/trust.js';
+
 // OpenClawCity Integration
 export { OBCBridge } from './integrations/openclawcity.js';
 export type { OBCBridgeConfig, OBCHeartbeatData, OBCArtifact, OBCPeerReview, OBCPeerReviewGiven, OBCProposalCompleted, HeartbeatLearning } from './integrations/openclawcity.js';
