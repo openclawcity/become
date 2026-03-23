@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { DreyfusStage, Score } from '../../core/types.js';
 import { BACKGROUND, BORDER, STAGE_COLORS, STAGE_LABELS } from '../theme.js';
 
@@ -14,30 +14,29 @@ export interface PopulationViewProps {
 }
 
 export function PopulationView({ agents, className }: PopulationViewProps) {
-  // Compute population stats
-  const allScores = agents.flatMap((a) => a.scores);
-  const avgScore = allScores.length > 0
-    ? Math.round(allScores.reduce((s, sc) => s + sc.score, 0) / allScores.length)
-    : 0;
+  const { allScores, avgScore, stageDist, totalSkills, topSkills } = useMemo(() => {
+    const scores = agents.flatMap((a) => a.scores);
+    const avg = scores.length > 0
+      ? Math.round(scores.reduce((s, sc) => s + sc.score, 0) / scores.length)
+      : 0;
 
-  // Stage distribution
-  const stageDist: Record<DreyfusStage, number> = {
-    novice: 0, beginner: 0, competent: 0, proficient: 0, expert: 0,
-  };
-  for (const s of allScores) {
-    stageDist[s.dreyfus_stage]++;
-  }
+    const dist: Record<DreyfusStage, number> = {
+      novice: 0, beginner: 0, competent: 0, proficient: 0, expert: 0,
+    };
+    for (const s of scores) {
+      dist[s.dreyfus_stage]++;
+    }
 
-  const totalSkills = allScores.length;
+    const skillCounts = new Map<string, number>();
+    for (const s of scores) {
+      skillCounts.set(s.skill, (skillCounts.get(s.skill) ?? 0) + 1);
+    }
+    const top = [...skillCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
 
-  // Skill popularity
-  const skillCounts = new Map<string, number>();
-  for (const s of allScores) {
-    skillCounts.set(s.skill, (skillCounts.get(s.skill) ?? 0) + 1);
-  }
-  const topSkills = [...skillCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8);
+    return { allScores: scores, avgScore: avg, stageDist: dist, totalSkills: scores.length, topSkills: top };
+  }, [agents]);
 
   return (
     <div

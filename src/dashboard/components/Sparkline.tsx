@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import type { DreyfusStage } from '../../core/types.js';
 import { STAGE_COLORS } from '../theme.js';
 
@@ -34,8 +34,8 @@ export function Sparkline({
     );
   }
 
-  // Resolve color
-  const strokeColor = color in STAGE_COLORS
+  // Resolve color — use hasOwnProperty to avoid prototype key collisions
+  const strokeColor = Object.prototype.hasOwnProperty.call(STAGE_COLORS, color)
     ? STAGE_COLORS[color as DreyfusStage]
     : color;
 
@@ -45,8 +45,12 @@ export function Sparkline({
   const chartHeight = height - padding * 2;
 
   const scores = data.map((d) => d.score);
-  const minScore = Math.min(...scores);
-  const maxScore = Math.max(...scores);
+  let minScore = scores[0];
+  let maxScore = scores[0];
+  for (let i = 1; i < scores.length; i++) {
+    if (scores[i] < minScore) minScore = scores[i];
+    if (scores[i] > maxScore) maxScore = scores[i];
+  }
   const range = maxScore - minScore || 1;
 
   const points = data.map((d, i) => {
@@ -64,7 +68,8 @@ export function Sparkline({
     `${points[0].x},${height - padding}`,
   ].join(' ');
 
-  const gradientId = `sparkline-grad-${Math.random().toString(36).slice(2, 8)}`;
+  const reactId = useId();
+  const gradientId = `sparkline-grad-${reactId.replace(/:/g, '')}`;
 
   return (
     <svg

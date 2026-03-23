@@ -50,14 +50,29 @@ export function PeerGraph({
     return map;
   }, [layout]);
 
-  // Aggregate edges for line thickness
-  const edgeCounts = useMemo(() => {
+  // Pre-compute deduplicated edges and per-node edge counts
+  const { edgeCounts, dedupedEdges, nodeEdgeCounts } = useMemo(() => {
     const counts = new Map<string, number>();
+    const deduped: { key: string; edge: (typeof edges)[0]; count: number }[] = [];
+    const seen = new Set<string>();
+    const nodeCounts = new Map<string, number>();
+
     for (const e of edges) {
-      const key = [e.from_agent, e.to_agent].sort().join('↔');
+      const key = [e.from_agent, e.to_agent].sort().join('\u2194');
       counts.set(key, (counts.get(key) ?? 0) + 1);
+      nodeCounts.set(e.from_agent, (nodeCounts.get(e.from_agent) ?? 0) + 1);
+      nodeCounts.set(e.to_agent, (nodeCounts.get(e.to_agent) ?? 0) + 1);
     }
-    return counts;
+
+    for (const e of edges) {
+      const key = [e.from_agent, e.to_agent].sort().join('\u2194');
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push({ key, edge: e, count: counts.get(key) ?? 1 });
+      }
+    }
+
+    return { edgeCounts: counts, dedupedEdges: deduped, nodeEdgeCounts: nodeCounts };
   }, [edges]);
 
   if (nodes.length === 0) {
@@ -70,9 +85,6 @@ export function PeerGraph({
     );
   }
 
-  // Deduplicated edges for rendering
-  const renderedEdges = new Set<string>();
-
   return (
     <svg
       width={width}
@@ -82,22 +94,17 @@ export function PeerGraph({
       role="img"
       aria-label={`Learning network: ${nodes.length} agents, ${edges.length} connections`}
     >
-      {/* Edges */}
-      {edges.map((e, i) => {
-        const key = [e.from_agent, e.to_agent].sort().join('↔');
-        if (renderedEdges.has(key)) return null;
-        renderedEdges.add(key);
-
-        const from = nodeMap.get(e.from_agent);
-        const to = nodeMap.get(e.to_agent);
+      {/* Edges (pre-deduplicated) */}
+      {dedupedEdges.map(({ key, edge, count }) => {
+        const from = nodeMap.get(edge.from_agent);
+        const to = nodeMap.get(edge.to_agent);
         if (!from || !to) return null;
 
-        const count = edgeCounts.get(key) ?? 1;
         const strokeWidth = Math.min(4, 0.5 + count * 0.5);
 
         return (
           <line
-            key={`edge-${key}-${i}`}
+            key={`edge-${key}`}
             x1={from.x}
             y1={from.y}
             x2={to.x}
@@ -109,12 +116,10 @@ export function PeerGraph({
         );
       })}
 
-      {/* Nodes */}
+      {/* Nodes (edge counts pre-computed) */}
       {layout.map((node) => {
         const color = node.stage ? STAGE_COLORS[node.stage] : ACCENT;
-        const edgeCount = edges.filter(
-          (e) => e.from_agent === node.id || e.to_agent === node.id,
-        ).length;
+        const edgeCount = nodeEdgeCounts.get(node.id) ?? 0;
         const radius = Math.min(20, 8 + edgeCount * 1.5);
 
         return (

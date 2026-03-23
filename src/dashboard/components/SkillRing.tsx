@@ -19,13 +19,14 @@ export function SkillRing({
   showLabel = true,
   className,
 }: SkillRingProps) {
-  const strokeWidth = Math.max(4, size * 0.08);
-  const radius = (size - strokeWidth) / 2;
+  const safeSize = Math.max(24, size); // Minimum 24px to avoid negative radius
+  const strokeWidth = Math.max(4, safeSize * 0.08);
+  const radius = (safeSize - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(100, Math.max(0, score)) / 100;
   const offset = circumference * (1 - progress);
   const color = STAGE_COLORS[stage];
-  const center = size / 2;
+  const center = safeSize / 2;
 
   return (
     <div
@@ -38,9 +39,9 @@ export function SkillRing({
       }}
     >
       <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
+        width={safeSize}
+        height={safeSize}
+        viewBox={`0 0 ${safeSize} ${safeSize}`}
         role="img"
         aria-label={`${skill}: ${score}/100, ${STAGE_LABELS[stage]}`}
       >
@@ -74,7 +75,7 @@ export function SkillRing({
           textAnchor="middle"
           dominantBaseline="central"
           fill="white"
-          fontSize={size * 0.28}
+          fontSize={safeSize * 0.28}
           fontWeight="bold"
           fontFamily="system-ui, sans-serif"
         >
@@ -86,7 +87,7 @@ export function SkillRing({
           <div
             style={{
               color: 'rgba(255,255,255,0.9)',
-              fontSize: Math.max(10, size * 0.14),
+              fontSize: Math.max(10, safeSize * 0.14),
               fontWeight: 500,
               fontFamily: 'system-ui, sans-serif',
             }}
@@ -96,7 +97,7 @@ export function SkillRing({
           <div
             style={{
               color,
-              fontSize: Math.max(9, size * 0.12),
+              fontSize: Math.max(9, safeSize * 0.12),
               fontFamily: 'system-ui, sans-serif',
               textTransform: 'uppercase',
               letterSpacing: '0.05em',
