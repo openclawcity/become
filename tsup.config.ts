@@ -3,6 +3,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    dashboard: 'src/dashboard/index.ts',
     cli: 'src/cli/init.ts',
   },
   format: ['esm', 'cjs'],
@@ -10,5 +11,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['@supabase/supabase-js', 'better-sqlite3'],
+  external: ['@supabase/supabase-js', 'better-sqlite3', 'react', 'react-dom', 'react/jsx-runtime'],
 });

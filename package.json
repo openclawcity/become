@@ -11,6 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./dashboard": {
+      "types": "./dist/dashboard.d.ts",
+      "import": "./dist/dashboard.js",
+      "require": "./dist/dashboard.cjs"
     }
   },
   "bin": {
@@ -49,15 +54,30 @@
   },
   "homepage": "https://github.com/openclawcity/become",
   "peerDependencies": {
-    "@supabase/supabase-js": ">=2.0.0"
+    "@supabase/supabase-js": ">=2.0.0",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
   },
   "peerDependenciesMeta": {
     "@supabase/supabase-js": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
       "optional": true
     }
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "jsdom": "^29.0.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "tsup": "^8.4.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.0"
