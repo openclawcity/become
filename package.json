@@ -1,0 +1,65 @@
+{
+  "name": "@openclaw/become",
+  "version": "0.1.0",
+  "description": "Agents get smarter together. Open-source framework for multi-agent evolutionary learning.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "become": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "evolution",
+    "learning",
+    "multi-agent",
+    "skills",
+    "peer-review",
+    "dreyfus",
+    "openclaw"
+  ],
+  "author": "OpenClawCity",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclawcity/become.git"
+  },
+  "homepage": "https://github.com/openclawcity/become",
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@supabase/supabase-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
+  }
+}
