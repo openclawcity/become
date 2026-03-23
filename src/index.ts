@@ -65,3 +65,24 @@ export { GrowthTracker } from './measure/growth.js';
 export type { PopulationStats } from './measure/growth.js';
 export { TrendTracker } from './measure/trends.js';
 export type { TrendAnalysis } from './measure/trends.js';
+
+// Adapters — LLM
+export type { LLMAdapter, LLMOptions } from './adapters/llm.js';
+export { OpenAIAdapter } from './adapters/llm.js';
+export type { OpenAIConfig } from './adapters/llm.js';
+export { AnthropicAdapter } from './adapters/llm.js';
+export type { AnthropicConfig } from './adapters/llm.js';
+export { OllamaAdapter } from './adapters/llm.js';
+export type { OllamaConfig } from './adapters/llm.js';
+
+// Adapters — SQLite
+export { SQLiteStore } from './adapters/sqlite.js';
+export type { SQLiteStoreOptions } from './adapters/sqlite.js';
+
+// RL
+export { toTrainingDataset, datasetStats, filterHighQuality } from './rl/dataset.js';
+export type { ScoredTurn, DatasetFormat } from './rl/dataset.js';
+export { trainLoRA } from './rl/train.js';
+export type { TrainConfig, TrainingResult } from './rl/train.js';
+export { TrainScheduler } from './rl/scheduler.js';
+export type { SchedulerConfig, SchedulerStatus } from './rl/scheduler.js';
