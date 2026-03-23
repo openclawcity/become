@@ -39,3 +39,19 @@ export { MilestoneDetector } from './core/milestones.js';
 
 // Adapters
 export { MemoryStore } from './adapters/memory.js';
+
+// Learn
+export { ConversationLearner } from './learn/conversation.js';
+export type { LearningSignal, ConversationSession, SessionLearning, LLMJudge } from './learn/conversation.js';
+export { SkillEvolver } from './learn/skill-evolver.js';
+export type { GeneratedSkill, EvolveLLM } from './learn/skill-evolver.js';
+export { SkillPruner } from './learn/skill-pruner.js';
+export { parseSkillFile, importSkillDirectory } from './learn/import.js';
+
+// Social
+export { PeerReviewProtocol } from './social/peer-review.js';
+export { TeachingProtocol } from './social/teaching.js';
+export type { TeacherCandidate, StudentCandidate, TeachingContext } from './social/teaching.js';
+export { LearningGraph } from './social/learning-graph.js';
+export type { MentorSummary } from './social/learning-graph.js';
+export { getReputationLevel, checkGate } from './social/reputation.js';
