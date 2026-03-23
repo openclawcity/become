@@ -109,7 +109,7 @@ export function computeFullScore(skill: string, input: ScoreInput): Score {
     score,
     blooms_level: detectBloomsLevel(input),
     dreyfus_stage: dreyfusStage(score),
-    evidence: input,
+    evidence: { ...input },
     computed_at: new Date().toISOString(),
   };
 }

@@ -1,5 +1,7 @@
 import type { AgentContext, Observation, Reflection, ReflectionInput, StorageAdapter } from './types.js';
 
+import { validateAgentId } from './validation.js';
+
 const SKILL_REGEX = /^[a-zA-Z0-9_-]{1,100}$/;
 const MIN_REFLECTION_LENGTH = 20;
 const MAX_REFLECTION_LENGTH = 2000;
@@ -10,6 +12,7 @@ export class Reflector {
   constructor(private adapter: StorageAdapter) {}
 
   async reflect(agentId: string, input: ReflectionInput): Promise<Reflection> {
+    validateAgentId(agentId);
     if (!SKILL_REGEX.test(input.skill)) {
       throw new Error(`Invalid skill name: "${input.skill}"`);
     }
@@ -184,7 +187,18 @@ export function detectCulturalOutlier(ctx: AgentContext): Observation | null {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function stripHtml(text: string): string {
-  return text.replace(/<[^>]*>/g, '');
+  // Remove complete tags
+  let result = text.replace(/<[^>]*>/g, '');
+  // Remove unclosed tags (e.g. "<script" without closing ">")
+  result = result.replace(/<[^>]*$/g, '');
+  // Remove orphaned closing fragments
+  result = result.replace(/^[^<]*>/g, (match) => {
+    // Only strip if it looks like a tag fragment
+    return match.includes('>') ? match.replace(/^[^>]*>/, '') : match;
+  });
+  // Collapse any remaining angle brackets that could be tag fragments
+  result = result.replace(/</g, '').replace(/>/g, '');
+  return result;
 }
 
 function countBy<T>(items: T[], key: (item: T) => string): Record<string, number> {

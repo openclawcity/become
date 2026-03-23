@@ -1,4 +1,5 @@
-import type { CelebrationTier, DreyfusStage, Milestone, MilestoneConfig, Score, StorageAdapter } from './types.js';
+import type { CelebrationTier, Milestone, MilestoneConfig, Score, StorageAdapter } from './types.js';
+import { validateAgentId } from './validation.js';
 
 const BUILT_IN: Record<string, MilestoneConfig> = {
   skill_discovered:   { threshold: 1,  description: 'First score for a skill' },
@@ -24,11 +25,15 @@ export class MilestoneDetector {
   }
 
   async check(agentId: string, scores: Score[]): Promise<Milestone[]> {
+    validateAgentId(agentId);
     const awarded: Milestone[] = [];
     const now = new Date().toISOString();
 
+    // Track global milestones already checked this call to avoid redundant adapter calls
+    const globalChecked = new Set<string>();
+
     for (const score of scores) {
-      // Skill discovery
+      // Skill discovery (per-skill)
       if (score.score > 0) {
         const type = `skill_discovered:${score.skill}`;
         if (await this.tryAward(agentId, type, 1, score.skill, now)) {
@@ -36,14 +41,14 @@ export class MilestoneDetector {
         }
       }
 
-      // Stage transitions
-      const stageChecks: [DreyfusStage, string, number][] = [
-        ['competent', 'skill_competent', 36],
-        ['proficient', 'skill_proficient', 56],
-        ['expert', 'skill_expert', 76],
+      // Stage transitions (per-skill)
+      const stageChecks: [string, number][] = [
+        ['skill_competent', 36],
+        ['skill_proficient', 56],
+        ['skill_expert', 76],
       ];
 
-      for (const [stage, prefix, threshold] of stageChecks) {
+      for (const [prefix, threshold] of stageChecks) {
         if (score.score >= threshold) {
           const type = `${prefix}:${score.skill}`;
           if (await this.tryAward(agentId, type, threshold, score.skill, now)) {
@@ -52,37 +57,21 @@ export class MilestoneDetector {
         }
       }
 
-      // Artifact count milestones
-      const artCount = score.evidence.artifact_count;
-      if (artCount >= 1) {
-        if (await this.tryAward(agentId, 'first_artifact', 1, undefined, now)) {
-          awarded.push({ agent_id: agentId, milestone_type: 'first_artifact', threshold: 1, achieved_at: now });
-        }
-      }
-      if (artCount >= 10) {
-        if (await this.tryAward(agentId, 'ten_artifacts', 10, undefined, now)) {
-          awarded.push({ agent_id: agentId, milestone_type: 'ten_artifacts', threshold: 10, achieved_at: now });
-        }
-      }
+      // Global milestones — only check once across all scores
+      const globalMilestones: [string, number, boolean][] = [
+        ['first_artifact', 1, score.evidence.artifact_count >= 1],
+        ['ten_artifacts', 10, score.evidence.artifact_count >= 10],
+        ['first_collab', 1, score.evidence.collab_count >= 1],
+        ['first_teaching', 1, score.evidence.teaching_events >= 1],
+        ['first_peer_review', 1, score.evidence.peer_reviews_given >= 1],
+      ];
 
-      // Collaboration
-      if (score.evidence.collab_count >= 1) {
-        if (await this.tryAward(agentId, 'first_collab', 1, undefined, now)) {
-          awarded.push({ agent_id: agentId, milestone_type: 'first_collab', threshold: 1, achieved_at: now });
-        }
-      }
-
-      // Teaching
-      if (score.evidence.teaching_events >= 1) {
-        if (await this.tryAward(agentId, 'first_teaching', 1, undefined, now)) {
-          awarded.push({ agent_id: agentId, milestone_type: 'first_teaching', threshold: 1, achieved_at: now });
-        }
-      }
-
-      // Peer review
-      if (score.evidence.peer_reviews_given >= 1) {
-        if (await this.tryAward(agentId, 'first_peer_review', 1, undefined, now)) {
-          awarded.push({ agent_id: agentId, milestone_type: 'first_peer_review', threshold: 1, achieved_at: now });
+      for (const [type, threshold, eligible] of globalMilestones) {
+        if (eligible && !globalChecked.has(type)) {
+          globalChecked.add(type);
+          if (await this.tryAward(agentId, type, threshold, undefined, now)) {
+            awarded.push({ agent_id: agentId, milestone_type: type, threshold, achieved_at: now });
+          }
         }
       }
     }

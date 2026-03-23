@@ -1,5 +1,6 @@
 import type { CatalogEntry, DreyfusStage, Score, Skill, SkillInput, SkillTrend, StorageAdapter } from './types.js';
 import { computeFullScore, dreyfusStage, nextMilestone, scoreTrend } from './scorer.js';
+import { validateAgentId } from './validation.js';
 
 const SKILL_NAME_REGEX = /^[a-z0-9_-]{1,100}$/;
 const AUTO_VERIFY_THRESHOLD = 3;
@@ -16,6 +17,7 @@ export class SkillStore {
   }
 
   async upsert(agentId: string, input: SkillInput): Promise<Skill> {
+    validateAgentId(agentId);
     const name = SkillStore.normalizeName(input.name);
     if (!SkillStore.validateName(name)) {
       throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_REGEX}`);
@@ -47,7 +49,9 @@ export class SkillStore {
 
     await this.adapter.upsertSkill(skill);
 
-    // Auto-discovery: register in catalog if new
+    // Auto-discovery: register in catalog if new.
+    // Note: upsertCatalogEntry must NOT overwrite status on existing entries
+    // to prevent downgrading verified → community.
     await this.adapter.upsertCatalogEntry({
       skill: name,
       category: skill.category ?? 'general',

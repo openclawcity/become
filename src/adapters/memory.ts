@@ -3,21 +3,45 @@ import type {
   NormCategory, PeerReview, Reflection, ResponseScore, Score, Skill, StorageAdapter,
 } from '../core/types.js';
 
+interface StoredScore extends Score {
+  agent_id: string;
+}
+
+interface StoredConversationScore extends ResponseScore {
+  agent_id: string;
+  session_id?: string;
+}
+
 export class MemoryStore implements StorageAdapter {
   private skills: Skill[] = [];
   private catalog: Map<string, CatalogEntry & { adopter_set: Set<string> }> = new Map();
-  private scoreHistory: Score[] & { agent_id: string }[] = [];
+  private scoreHistory: StoredScore[] = [];
   private reflections: Reflection[] = [];
   private milestones: Milestone[] = [];
   private peerReviews: PeerReview[] = [];
   private learningEdges: LearningEdge[] = [];
   private reputationMap: Map<string, number> = new Map();
-  private conversationScores: (ResponseScore & { agent_id: string; session_id?: string })[] = [];
+  private conversationScores: StoredConversationScore[] = [];
   private norms: CulturalNorm[] = [];
   private idCounter = 0;
 
   private nextId(): string {
     return String(++this.idCounter);
+  }
+
+  /** Reset all data. Useful for test isolation. */
+  clear(): void {
+    this.skills = [];
+    this.catalog.clear();
+    this.scoreHistory = [];
+    this.reflections = [];
+    this.milestones = [];
+    this.peerReviews = [];
+    this.learningEdges = [];
+    this.reputationMap.clear();
+    this.conversationScores = [];
+    this.norms = [];
+    this.idCounter = 0;
   }
 
   // ── Skills ──────────────────────────────────────────────────────────────
@@ -50,6 +74,12 @@ export class MemoryStore implements StorageAdapter {
 
   async deleteSkill(agentId: string, skill: string): Promise<void> {
     this.skills = this.skills.filter((s) => !(s.agent_id === agentId && s.name === skill));
+    // Update catalog adopter count
+    const entry = this.catalog.get(skill);
+    if (entry) {
+      entry.adopter_set.delete(agentId);
+      entry.adopter_count = entry.adopter_set.size;
+    }
   }
 
   // ── Catalog ─────────────────────────────────────────────────────────────
@@ -90,19 +120,19 @@ export class MemoryStore implements StorageAdapter {
   // ── Score History ───────────────────────────────────────────────────────
 
   async saveScore(agentId: string, score: Score): Promise<void> {
-    (this.scoreHistory as any[]).push({ ...score, agent_id: agentId });
+    this.scoreHistory.push({ ...score, agent_id: agentId });
   }
 
   async getScoreHistory(agentId: string, skill: string, days = 30): Promise<Score[]> {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    return (this.scoreHistory as any[])
+    return this.scoreHistory
       .filter((s) => s.agent_id === agentId && s.skill === skill && s.computed_at >= cutoff)
       .sort((a, b) => a.computed_at.localeCompare(b.computed_at));
   }
 
   async getLatestScores(agentId: string): Promise<Score[]> {
-    const bySkill = new Map<string, Score>();
-    for (const s of this.scoreHistory as any[]) {
+    const bySkill = new Map<string, StoredScore>();
+    for (const s of this.scoreHistory) {
       if (s.agent_id !== agentId) continue;
       const existing = bySkill.get(s.skill);
       if (!existing || s.computed_at > existing.computed_at) {
@@ -211,8 +241,10 @@ export class MemoryStore implements StorageAdapter {
   }
 
   async getConversationScores(agentId: string, opts?: { limit?: number }): Promise<ResponseScore[]> {
-    let result = this.conversationScores.filter((s) => s.agent_id === agentId);
-    if (opts?.limit) result = result.slice(-opts.limit);
+    const result = this.conversationScores.filter((s) => s.agent_id === agentId);
+    // Return most recent first, consistent with other list methods
+    result.reverse();
+    if (opts?.limit) return result.slice(0, opts.limit);
     return result;
   }
 

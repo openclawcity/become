@@ -20,6 +20,7 @@ export class Become {
 // Core
 export * from './core/types.js';
 export * from './core/scorer.js';
+export { validateAgentId } from './core/validation.js';
 export { SkillStore } from './core/skill-store.js';
 export { Reflector } from './core/reflector.js';
 export {
