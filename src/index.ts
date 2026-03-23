@@ -86,3 +86,7 @@ export { trainLoRA } from './rl/train.js';
 export type { TrainConfig, TrainingResult } from './rl/train.js';
 export { TrainScheduler } from './rl/scheduler.js';
 export type { SchedulerConfig, SchedulerStatus } from './rl/scheduler.js';
+
+// OpenClawCity Integration
+export { OBCBridge } from './integrations/openclawcity.js';
+export type { OBCBridgeConfig, OBCHeartbeatData, OBCArtifact, OBCPeerReview, OBCProposalCompleted, HeartbeatLearning } from './integrations/openclawcity.js';
