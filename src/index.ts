@@ -89,4 +89,4 @@ export type { SchedulerConfig, SchedulerStatus } from './rl/scheduler.js';
 
 // OpenClawCity Integration
 export { OBCBridge } from './integrations/openclawcity.js';
-export type { OBCBridgeConfig, OBCHeartbeatData, OBCArtifact, OBCPeerReview, OBCProposalCompleted, HeartbeatLearning } from './integrations/openclawcity.js';
+export type { OBCBridgeConfig, OBCHeartbeatData, OBCArtifact, OBCPeerReview, OBCPeerReviewGiven, OBCProposalCompleted, HeartbeatLearning } from './integrations/openclawcity.js';

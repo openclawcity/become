@@ -49,7 +49,7 @@ async function main() {
     weaknesses: ['non-standard legend', 'missing scale bar'],
     suggestions: ['use ISO legend symbols', 'add scale bar'],
   });
-  console.log(`  Evidence: ${bridge.getEvidence().peer_reviews_received} peer reviews received\n`);
+  console.log(`  Evidence: ${bridge.getSkillEvidence('cartography').peer_reviews_received} peer reviews received\n`);
 
   // ── Collaboration ───────────────────────────────────
   console.log('13:00 — Collaborated with agent-builder on a city guide');
@@ -59,7 +59,7 @@ async function main() {
     skill: 'cartography',
     artifact_id: 'guide-001',
   });
-  console.log(`  Evidence: ${bridge.getEvidence().collab_count} collaborations completed\n`);
+  console.log(`  Evidence: ${bridge.getStats().collabs_completed} collaborations completed\n`);
 
   // ── Got taught by agent-scholar ─────────────────────
   console.log('15:00 — agent-scholar taught me research methodology');
@@ -70,7 +70,7 @@ async function main() {
   // ── Taught agent-newbie ─────────────────────────────
   console.log('16:00 — Taught agent-newbie navigation basics');
   await bridge.onTeaching('agent-newbie', 'navigation');
-  console.log(`  Evidence: ${bridge.getEvidence().teaching_events} teaching events\n`);
+  console.log(`  Evidence: ${bridge.getSkillEvidence('navigation').teaching_events} teaching events\n`);
 
   // ── Afternoon heartbeat with reactions ──────────────
   console.log('17:00 — Afternoon heartbeat');
@@ -85,7 +85,7 @@ async function main() {
   console.log(`  Reactions: ${afternoon.reactions_processed} (${afternoon.signals.filter(s => s.startsWith('human')).length} from humans)`);
   bridge.onNewFollower(); // agent-newbie started following
   bridge.onNewFollower(); // agent-builder started following
-  console.log(`  New followers: ${bridge.getEvidence().follower_count}\n`);
+  console.log(`  New followers: ${bridge.getStats().follower_count}\n`);
 
   // ── Reflection ──────────────────────────────────────
   console.log('18:00 — Self-reflection');
@@ -103,14 +103,12 @@ async function main() {
     console.log(`  ${s.skill}: ${s.score}/100 (${s.dreyfus_stage}, Bloom's: ${s.blooms_level})`);
   }
 
-  // Evidence summary
-  const ev = bridge.getEvidence();
-  console.log(`\n  Artifacts created: ${ev.artifact_count}`);
-  console.log(`  Reactions received: ${ev.total_reactions}`);
-  console.log(`  Collaborations: ${ev.collab_count}`);
-  console.log(`  Peer reviews received: ${ev.peer_reviews_received}`);
-  console.log(`  Teaching events: ${ev.teaching_events}`);
-  console.log(`  Followers: ${ev.follower_count}`);
+  // Stats summary
+  const stats = bridge.getStats();
+  console.log(`\n  Artifacts created: ${stats.total_artifacts}`);
+  console.log(`  Collaborations: ${stats.collabs_completed}`);
+  console.log(`  Followers: ${stats.follower_count}`);
+  console.log(`  Skills tracked: ${stats.skills_count}`);
 
   // Learning network
   const network = await bridge.learningNetwork();

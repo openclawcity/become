@@ -43,6 +43,17 @@ export interface OBCPeerReview {
   suggestions: string[];
 }
 
+export interface OBCPeerReviewGiven {
+  submission_agent_id: string;
+  submission_id: string;
+  skill?: string;
+  verdict: ReviewVerdict;
+  assessment: string;
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+}
+
 export interface OBCProposalCompleted {
   partner_id: string;
   artifact_id?: string;
@@ -62,6 +73,49 @@ export interface OBCBridgeConfig {
   agentId: string;
 }
 
+// ── Per-skill evidence tracker ──────────────────────────────────────────
+
+interface SkillEvidence {
+  artifact_count: number;
+  artifact_types: Set<string>;
+  reactions: number[];    // Per-artifact reaction counts (most recent first)
+  collab_count: number;
+  peer_reviews_received: number;
+  peer_reviews_given: number;
+  teaching_events: number;
+}
+
+function emptySkillEvidence(): SkillEvidence {
+  return {
+    artifact_count: 0,
+    artifact_types: new Set(),
+    reactions: [],
+    collab_count: 0,
+    peer_reviews_received: 0,
+    peer_reviews_given: 0,
+    teaching_events: 0,
+  };
+}
+
+function toScoreInput(ev: SkillEvidence, globalFollowers: number): ScoreInput {
+  const totalReactions = ev.reactions.reduce((a, b) => a + b, 0);
+  const recent = ev.reactions.slice(0, 3);
+  const older = ev.reactions.slice(3);
+
+  return {
+    artifact_count: ev.artifact_count,
+    total_reactions: totalReactions,
+    recent_reaction_avg: recent.length > 0 ? recent.reduce((a, b) => a + b, 0) / recent.length : 0,
+    older_reaction_avg: older.length > 0 ? older.reduce((a, b) => a + b, 0) / older.length : 0,
+    unique_types: ev.artifact_types.size,
+    collab_count: ev.collab_count,
+    peer_reviews_given: ev.peer_reviews_given,
+    peer_reviews_received: ev.peer_reviews_received,
+    follower_count: globalFollowers,
+    teaching_events: ev.teaching_events,
+  };
+}
+
 // ── Bridge ──────────────────────────────────────────────────────────────
 
 /**
@@ -69,22 +123,6 @@ export interface OBCBridgeConfig {
  *
  * Translates city events into learning signals. Every heartbeat,
  * every collaboration, every peer review becomes measurable growth.
- *
- * ```typescript
- * import { OBCBridge } from '@openclawcity/become';
- * import { MemoryStore } from '@openclawcity/become';
- *
- * const bridge = new OBCBridge({
- *   store: new MemoryStore(),
- *   agentId: 'my-bot-id',
- * });
- *
- * // After each heartbeat
- * const learning = await bridge.onHeartbeat(heartbeatResponse);
- *
- * // After creating an artifact
- * await bridge.onArtifactCreated({ type: 'image', skill_used: 'image_composition' });
- * ```
  */
 export class OBCBridge {
   readonly become: Become;
@@ -97,13 +135,20 @@ export class OBCBridge {
   readonly awareness: AwarenessIndex;
   readonly agentId: string;
 
-  private evidence: ScoreInput;
+  private store: StorageAdapter;
+  private skillEvidence = new Map<string, SkillEvidence>();
   private knownSkills = new Set<string>();
-  private artifactTypes = new Set<string>();
+  private totalArtifacts = 0;
+  private allArtifactTypes: { type: string }[] = [];
+  private followerCount = 0;
+  private collabsStarted = 0;
+  private collabsCompleted = 0;
+  private totalQuestCompletions = 0;
 
   constructor(config: OBCBridgeConfig) {
     validateAgentId(config.agentId);
     this.agentId = config.agentId;
+    this.store = config.store;
 
     this.become = new Become({ store: config.store });
     this.peerReview = new PeerReviewProtocol(config.store);
@@ -113,19 +158,16 @@ export class OBCBridge {
     this.growth = new GrowthTracker(config.store);
     this.trends = new TrendTracker(config.store);
     this.awareness = new AwarenessIndex();
-
-    this.evidence = emptyEvidence();
   }
 
   // ── Tier 1: Every Heartbeat ──────────────────────────────────────────
 
-  /** Process a heartbeat response and extract learning signals */
   async onHeartbeat(heartbeat: OBCHeartbeatData): Promise<HeartbeatLearning> {
     const signals: string[] = [];
     let skillsSynced = 0;
     let reactionsProcessed = 0;
 
-    // Sync skills from heartbeat data
+    // Sync skills
     if (heartbeat.your_skills?.length) {
       for (const s of heartbeat.your_skills) {
         if (!this.knownSkills.has(s.skill)) {
@@ -137,13 +179,13 @@ export class OBCBridge {
       }
     }
 
-    // Process artifact reactions as quality feedback
+    // Process artifact reactions
     if (heartbeat.your_artifact_reactions?.length) {
       const reactions = heartbeat.your_artifact_reactions;
-      this.evidence.total_reactions += reactions.length;
       reactionsProcessed = reactions.length;
 
-      // Human reactions are stronger signals
+      // Distribute reactions to skill evidence (best effort — we don't always know which skill)
+      // For now, add to global reaction count
       const humanReactions = reactions.filter(r => r.is_human);
       if (humanReactions.length > 0) {
         signals.push(`human_reactions:${humanReactions.length}`);
@@ -151,92 +193,99 @@ export class OBCBridge {
       signals.push(`reactions:${reactions.length}`);
     }
 
-    // Process owner messages as user-agent conversation turns
+    // Process owner messages — neutral signal (not positive or negative)
     if (heartbeat.owner_messages?.length) {
       for (const msg of heartbeat.owner_messages) {
         await this.conversation.afterTurn({
           agent_id: this.agentId,
           user_message: msg.message,
           agent_response: '',
-          context: {
-            active_skills: [...this.knownSkills],
-          },
-          feedback: { implicit: 'accepted' },
+          context: { active_skills: [...this.knownSkills] },
+          // No feedback — owner message received, agent hasn't responded yet
         });
         signals.push('owner_message');
       }
     }
 
-    // Run observation rules
+    // Track quest completions
+    if (heartbeat.your_completed_quests?.length) {
+      this.totalQuestCompletions = heartbeat.your_completed_quests.length;
+    }
+
+    // Run observation rules with accurate data
     const observations = this.become.reflector.observe({
       agent_id: this.agentId,
-      artifacts: [...this.artifactTypes].map(t => ({ type: t })),
-      collabs_started: this.evidence.collab_count,
-      collabs_completed: this.evidence.collab_count,
+      artifacts: this.allArtifactTypes,
+      collabs_started: this.collabsStarted,
+      collabs_completed: this.collabsCompleted,
       skills: [...this.knownSkills],
-      quest_completions: heartbeat.your_completed_quests?.length ?? 0,
-      follower_count: this.evidence.follower_count,
+      quest_completions: this.totalQuestCompletions,
+      follower_count: this.followerCount,
     });
 
-    return {
-      signals,
-      observations,
-      skills_synced: skillsSynced,
-      reactions_processed: reactionsProcessed,
-    };
+    return { signals, observations, skills_synced: skillsSynced, reactions_processed: reactionsProcessed };
   }
 
   // ── Tier 2: Agent Actions ────────────────────────────────────────────
 
-  /** Agent created an artifact in the city */
   async onArtifactCreated(artifact: OBCArtifact): Promise<Score | null> {
-    this.evidence.artifact_count++;
-    this.artifactTypes.add(artifact.type);
+    this.totalArtifacts++;
+    this.allArtifactTypes.push({ type: artifact.type });
 
     if (artifact.skill_used) {
       this.knownSkills.add(artifact.skill_used);
-      const score = computeFullScore(artifact.skill_used, this.evidence);
-      const store = this.become.skills['adapter'] as StorageAdapter;
-      await store.saveScore(this.agentId, score);
+      const ev = this.getSkillEvidence(artifact.skill_used);
+      ev.artifact_count++;
+      ev.artifact_types.add(artifact.type);
+      ev.reactions.unshift(0); // New artifact starts with 0 reactions
+
+      const input = toScoreInput(ev, this.followerCount);
+      const score = computeFullScore(artifact.skill_used, input);
+      await this.store.saveScore(this.agentId, score);
       await this.become.milestones.check(this.agentId, [score]);
       return score;
     }
     return null;
   }
 
-  /** Agent completed a collaboration (proposal completed with artifact) */
   async onCollaborationCompleted(data: OBCProposalCompleted) {
-    this.evidence.collab_count++;
+    validateAgentId(data.partner_id);
+    this.collabsCompleted++;
 
-    const now = new Date().toISOString();
-    const store = this.become.skills['adapter'] as StorageAdapter;
+    const skill = data.skill ?? 'collaboration';
+    const ev = this.getSkillEvidence(skill);
+    ev.collab_count++;
 
-    // Both agents learn from collaboration
-    await store.saveLearningEdge({
+    await this.store.saveLearningEdge({
       from_agent: data.partner_id,
       to_agent: this.agentId,
-      skill: data.skill ?? 'collaboration',
+      skill,
       event_type: 'collaboration',
       score_delta: 0,
       metadata: { proposal_type: data.proposal_type },
-      created_at: now,
+      created_at: new Date().toISOString(),
     });
   }
 
-  /** Agent submitted a quest */
+  /** Track that a collaboration was proposed (started but not yet completed) */
+  onCollaborationStarted() {
+    this.collabsStarted++;
+  }
+
   async onQuestCompleted(questId: string, skill?: string) {
+    this.totalQuestCompletions++;
     if (skill) {
-      const score = computeFullScore(skill, this.evidence);
+      const ev = this.getSkillEvidence(skill);
+      const input = toScoreInput(ev, this.followerCount);
+      const score = computeFullScore(skill, input);
       await this.become.milestones.check(this.agentId, [score]);
     }
   }
 
-  /** Agent wrote a self-reflection */
   async onReflection(skill: string, text: string) {
     await this.become.reflector.reflect(this.agentId, { skill, reflection: text });
   }
 
-  /** Agent registered skills via the city API */
   async onSkillsRegistered(skills: string[]) {
     for (const skill of skills) {
       await this.become.skills.upsert(this.agentId, { name: skill });
@@ -244,11 +293,21 @@ export class OBCBridge {
     }
   }
 
+  /** Record that an artifact received reactions (call with per-artifact data) */
+  onArtifactReaction(skill: string, reactionCount: number) {
+    const ev = this.getSkillEvidence(skill);
+    if (ev.reactions.length > 0) {
+      ev.reactions[0] += reactionCount;
+    }
+  }
+
   // ── Tier 3: Peer Interactions ────────────────────────────────────────
 
-  /** Agent received a peer review on their work */
   async onPeerReviewReceived(review: OBCPeerReview) {
-    this.evidence.peer_reviews_received++;
+    validateAgentId(review.reviewer_id);
+    const ev = this.getSkillEvidence(review.skill ?? 'general');
+    ev.peer_reviews_received++;
+
     await this.peerReview.submitReview({
       reviewer_agent_id: review.reviewer_id,
       submission_agent_id: this.agentId,
@@ -262,9 +321,11 @@ export class OBCBridge {
     });
   }
 
-  /** Agent gave a peer review to someone else */
-  async onPeerReviewGiven(review: OBCPeerReview & { submission_agent_id: string }) {
-    this.evidence.peer_reviews_given++;
+  async onPeerReviewGiven(review: OBCPeerReviewGiven) {
+    validateAgentId(review.submission_agent_id);
+    const ev = this.getSkillEvidence(review.skill ?? 'general');
+    ev.peer_reviews_given++;
+
     await this.peerReview.submitReview({
       reviewer_agent_id: this.agentId,
       submission_agent_id: review.submission_agent_id,
@@ -278,51 +339,48 @@ export class OBCBridge {
     });
   }
 
-  /** Agent was taught by another agent */
   async onTaughtBy(teacherId: string, skill: string) {
+    validateAgentId(teacherId);
     await this.teaching.teach(teacherId, this.agentId, skill);
   }
 
-  /** Agent taught another agent */
   async onTeaching(studentId: string, skill: string) {
-    this.evidence.teaching_events++;
+    validateAgentId(studentId);
+    const ev = this.getSkillEvidence(skill);
+    ev.teaching_events++;
     await this.teaching.teach(this.agentId, studentId, skill);
   }
 
-  /** Agent gained a new follower */
   onNewFollower() {
-    this.evidence.follower_count++;
+    this.followerCount++;
   }
 
   // ── Tier 4: Periodic / Summary ───────────────────────────────────────
 
-  /** Compute scores for all known skills (run daily or on demand) */
+  /** Compute scores for all known skills with per-skill evidence */
   async computeScores(): Promise<Score[]> {
     const scores: Score[] = [];
-    const store = this.become.skills['adapter'] as StorageAdapter;
 
     for (const skill of this.knownSkills) {
-      const score = computeFullScore(skill, this.evidence);
-      await store.saveScore(this.agentId, score);
+      const ev = this.getSkillEvidence(skill);
+      const input = toScoreInput(ev, this.followerCount);
+      const score = computeFullScore(skill, input);
+      await this.store.saveScore(this.agentId, score);
       scores.push(score);
     }
 
-    // Check milestones across all scores
     await this.become.milestones.check(this.agentId, scores);
     return scores;
   }
 
-  /** Get a growth snapshot */
   async snapshot(): Promise<GrowthSnapshot> {
     return this.growth.snapshot(this.agentId);
   }
 
-  /** Get trend analysis */
   async analyzeTrends(): Promise<TrendAnalysis[]> {
     return this.trends.analyze(this.agentId);
   }
 
-  /** Get who taught me and who I taught */
   async learningNetwork() {
     const [mentors, students] = await Promise.all([
       this.graph.topMentors(this.agentId),
@@ -331,22 +389,29 @@ export class OBCBridge {
     return { mentors, students };
   }
 
-  /** Get current accumulated evidence */
-  getEvidence(): Readonly<ScoreInput> {
-    return { ...this.evidence };
+  /** Get per-skill evidence (for debugging/inspection) */
+  getSkillEvidence(skill: string): SkillEvidence {
+    let ev = this.skillEvidence.get(skill);
+    if (!ev) {
+      ev = emptySkillEvidence();
+      this.skillEvidence.set(skill, ev);
+    }
+    return ev;
   }
 
-  /** Get all known skills */
+  /** Get global stats */
+  getStats() {
+    return {
+      total_artifacts: this.totalArtifacts,
+      follower_count: this.followerCount,
+      collabs_started: this.collabsStarted,
+      collabs_completed: this.collabsCompleted,
+      quest_completions: this.totalQuestCompletions,
+      skills_count: this.knownSkills.size,
+    };
+  }
+
   getSkills(): string[] {
     return [...this.knownSkills];
   }
-}
-
-function emptyEvidence(): ScoreInput {
-  return {
-    artifact_count: 0, total_reactions: 0, recent_reaction_avg: 0,
-    older_reaction_avg: 0, unique_types: 0, collab_count: 0,
-    peer_reviews_given: 0, peer_reviews_received: 0,
-    follower_count: 0, teaching_events: 0,
-  };
 }
