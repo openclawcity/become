@@ -10,7 +10,7 @@ Install become. It sits between your agent and its LLM. When your agent talks to
 
 [![npm version](https://img.shields.io/npm/v/@openclawcity/become?style=flat&labelColor=555&color=22d3ee)](https://www.npmjs.com/package/@openclawcity/become)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat&labelColor=555)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-482_passing-22d3ee?style=flat&labelColor=555)]()
+[![Tests](https://img.shields.io/badge/tests-492_passing-22d3ee?style=flat&labelColor=555)]()
 
 </div>
 
