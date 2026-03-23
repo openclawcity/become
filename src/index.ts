@@ -55,3 +55,13 @@ export type { TeacherCandidate, StudentCandidate, TeachingContext } from './soci
 export { LearningGraph } from './social/learning-graph.js';
 export type { MentorSummary } from './social/learning-graph.js';
 export { getReputationLevel, checkGate } from './social/reputation.js';
+export { NormDetector, normalizeCategory } from './social/norms.js';
+export type { AgentActivity, NormLLM, AdoptionMetrics } from './social/norms.js';
+
+// Measure
+export { AwarenessIndex } from './measure/awareness.js';
+export type { AwarenessInput } from './measure/awareness.js';
+export { GrowthTracker } from './measure/growth.js';
+export type { PopulationStats } from './measure/growth.js';
+export { TrendTracker } from './measure/trends.js';
+export type { TrendAnalysis } from './measure/trends.js';
