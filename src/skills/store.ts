@@ -47,6 +47,7 @@ export class FileSkillStore {
   }
 
   getApproved(id: string): SkillFile | null {
+    this.validateId(id);
     return this.readFile(join(this.skillsDir, `${id}.md`));
   }
 
@@ -67,6 +68,7 @@ export class FileSkillStore {
   }
 
   approve(id: string): boolean {
+    this.validateId(id);
     const src = join(this.pendingDir, `${id}.md`);
     if (!existsSync(src)) return false;
 
@@ -81,6 +83,7 @@ export class FileSkillStore {
   }
 
   reject(id: string): boolean {
+    this.validateId(id);
     const src = join(this.pendingDir, `${id}.md`);
     if (!existsSync(src)) return false;
     const dest = join(this.rejectedDir, `${id}.md`);
@@ -89,6 +92,7 @@ export class FileSkillStore {
   }
 
   disable(id: string): boolean {
+    this.validateId(id);
     const src = join(this.skillsDir, `${id}.md`);
     if (!existsSync(src)) return false;
     const dest = join(this.rejectedDir, `${id}.md`);
@@ -97,6 +101,7 @@ export class FileSkillStore {
   }
 
   remove(id: string): boolean {
+    this.validateId(id);
     for (const dir of [this.skillsDir, this.pendingDir, this.rejectedDir]) {
       const path = join(dir, `${id}.md`);
       if (existsSync(path)) {
@@ -108,6 +113,17 @@ export class FileSkillStore {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Validate that an id does not contain path traversal characters.
+   * Prevents attacks like id="../../.ssh/authorized_keys"
+   */
+  private validateId(id: string): void {
+    if (!id || typeof id !== 'string') throw new Error('Invalid id');
+    if (id.includes('/') || id.includes('\\') || id.includes('..') || id.includes('\0')) {
+      throw new Error('Invalid id: path traversal detected');
+    }
+  }
 
   private readDir(dir: string): SkillFile[] {
     if (!existsSync(dir)) return [];

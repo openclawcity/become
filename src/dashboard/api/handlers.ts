@@ -30,8 +30,13 @@ export function createHandlers(deps: DashboardDeps): Record<string, Handler> {
       if (newState !== 'on' && newState !== 'off') {
         return { error: 'state must be "on" or "off"' };
       }
-      setState(newState);
-      return { state: newState };
+      try {
+        setState(newState);
+        return { state: newState };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to change state';
+        return { error: msg };
+      }
     },
 
     // ── Skills (approved) ───────────────────────────────────────────────

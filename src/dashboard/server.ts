@@ -7,8 +7,12 @@ export function createDashboardServer(deps: DashboardDeps) {
   const html = renderDashboardHTML();
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    // CORS for local dev
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS restricted to localhost only — prevents external sites from
+    // making API calls to the dashboard
+    const origin = req.headers.origin ?? '';
+    if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -39,7 +43,15 @@ export function createDashboardServer(deps: DashboardDeps) {
       let body: any;
       if (req.method === 'POST' || req.method === 'DELETE') {
         const raw = await readBody(req);
-        if (raw) body = JSON.parse(raw);
+        if (raw) {
+          try {
+            body = JSON.parse(raw);
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+            return;
+          }
+        }
       }
 
       const result = await handler(body);

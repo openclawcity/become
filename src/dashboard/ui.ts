@@ -93,10 +93,10 @@ export function renderDashboardHTML(): string {
   </div>
 
   <nav>
-    <button class="active" onclick="showPage('pending')">Pending</button>
-    <button onclick="showPage('skills')">Active Skills</button>
-    <button onclick="showPage('network')">Network</button>
-    <button onclick="showPage('settings')">Settings</button>
+    <button class="active" onclick="showPage('pending',this)">Pending</button>
+    <button onclick="showPage('skills',this)">Active Skills</button>
+    <button onclick="showPage('network',this)">Network</button>
+    <button onclick="showPage('settings',this)">Settings</button>
   </nav>
 
   <!-- Pending Page -->
@@ -122,11 +122,11 @@ async function api(method, path, body) {
   return res.json();
 }
 
-function showPage(name) {
+function showPage(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
   if (name === 'pending') loadPending();
   if (name === 'skills') loadSkills();
   if (name === 'network') loadNetwork();
@@ -325,7 +325,7 @@ async function clearAll() {
 
 function esc(s) {
   if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // Init

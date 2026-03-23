@@ -83,9 +83,54 @@ describe('Dashboard Server', () => {
     expect(res.status).toBe(404);
   });
 
-  it('handles CORS preflight', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/api/status`, { method: 'OPTIONS' });
+  it('handles CORS preflight for localhost', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/status`, {
+      method: 'OPTIONS',
+      headers: { 'Origin': 'http://localhost:30002' },
+    });
     expect(res.status).toBe(204);
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:30002');
+  });
+
+  it('blocks CORS from external origins', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/status`, {
+      headers: { 'Origin': 'https://evil-site.com' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('returns 400 for malformed JSON body', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not json at all!!!',
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe('Invalid JSON body');
+  });
+
+  it('returns error when setState fails', async () => {
+    const failDash = createDashboardServer({
+      store,
+      trust,
+      getProxyStats: () => null,
+      getState: () => 'off',
+      setState: () => { throw new Error('OpenClaw not installed'); },
+    });
+    await failDash.listen(0);
+    const failPort = (failDash.server.address() as any).port;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${failPort}/api/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: 'on' }),
+      });
+      const data = await res.json();
+      expect(data.error).toContain('OpenClaw not installed');
+    } finally {
+      await failDash.close();
+    }
   });
 });

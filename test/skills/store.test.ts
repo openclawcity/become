@@ -179,6 +179,35 @@ describe('FileSkillStore', () => {
     expect(store.disable('nonexistent')).toBe(false);
   });
 
+  // Security: path traversal prevention
+  it('rejects path traversal in approve', () => {
+    expect(() => store.approve('../../etc/passwd')).toThrow('path traversal');
+  });
+
+  it('rejects path traversal in reject', () => {
+    expect(() => store.reject('../../../.ssh/id_rsa')).toThrow('path traversal');
+  });
+
+  it('rejects path traversal in disable', () => {
+    expect(() => store.disable('..\\..\\windows\\system32')).toThrow('path traversal');
+  });
+
+  it('rejects path traversal in remove', () => {
+    expect(() => store.remove('../../important_file')).toThrow('path traversal');
+  });
+
+  it('rejects path traversal in getApproved', () => {
+    expect(() => store.getApproved('../secret')).toThrow('path traversal');
+  });
+
+  it('rejects forward slashes in id', () => {
+    expect(() => store.approve('skills/sneaky')).toThrow('path traversal');
+  });
+
+  it('rejects null bytes in id', () => {
+    expect(() => store.approve('file\0.md')).toThrow('path traversal');
+  });
+
   it('round-trips skill file format correctly', () => {
     const saved = store.savePending({
       name: 'multi_line',
