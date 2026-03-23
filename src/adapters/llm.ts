@@ -13,7 +13,11 @@ export interface LLMOptions {
   maxTokens?: number;
   temperature?: number;
   model?: string;
+  /** Request timeout in milliseconds (default: 60000) */
+  timeoutMs?: number;
 }
+
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 // ── OpenAI-compatible adapter ───────────────────────────────────────────
 
@@ -41,7 +45,7 @@ export class OpenAIAdapter implements LLMAdapter {
       messages: [{ role: 'user', content: prompt }],
       max_tokens: opts?.maxTokens ?? 2000,
       temperature: opts?.temperature ?? 0.7,
-    });
+    }, opts?.timeoutMs);
     return response.choices?.[0]?.message?.content ?? '';
   }
 
@@ -52,12 +56,12 @@ export class OpenAIAdapter implements LLMAdapter {
       max_tokens: opts?.maxTokens ?? 2000,
       temperature: opts?.temperature ?? 0.3,
       response_format: { type: 'json_object' },
-    });
+    }, opts?.timeoutMs);
     const text = response.choices?.[0]?.message?.content ?? '{}';
     return JSON.parse(text) as T;
   }
 
-  private async request(body: Record<string, unknown>): Promise<any> {
+  private async request(body: Record<string, unknown>, timeoutMs?: number): Promise<any> {
     const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -65,6 +69,7 @@ export class OpenAIAdapter implements LLMAdapter {
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -106,6 +111,7 @@ export class AnthropicAdapter implements LLMAdapter {
         max_tokens: opts?.maxTokens ?? 2000,
         messages: [{ role: 'user', content: prompt }],
       }),
+      signal: AbortSignal.timeout(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -122,10 +128,17 @@ export class AnthropicAdapter implements LLMAdapter {
       `${prompt}\n\nRespond with valid JSON only, no other text.`,
       { ...opts, temperature: opts?.temperature ?? 0.3 },
     );
-    // Extract JSON from potential wrapper text
-    const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (!match) throw new Error('No JSON found in response');
-    return JSON.parse(match[0]) as T;
+    // Try parsing the whole text first, then extract JSON
+    try {
+      return JSON.parse(text.trim()) as T;
+    } catch {
+      // Extract first valid JSON object or array (non-greedy)
+      const match = text.match(/\{[\s\S]*?\}(?=\s*$|\s*[^}\]])/);
+      const arrMatch = text.match(/\[[\s\S]*?\](?=\s*$|\s*[^}\]])/);
+      const candidate = match?.[0] ?? arrMatch?.[0];
+      if (!candidate) throw new Error('No JSON found in response');
+      return JSON.parse(candidate) as T;
+    }
   }
 }
 
@@ -158,6 +171,7 @@ export class OllamaAdapter implements LLMAdapter {
           temperature: opts?.temperature ?? 0.7,
         },
       }),
+      signal: AbortSignal.timeout(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -183,6 +197,7 @@ export class OllamaAdapter implements LLMAdapter {
           temperature: opts?.temperature ?? 0.3,
         },
       }),
+      signal: AbortSignal.timeout(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
 
     if (!res.ok) {

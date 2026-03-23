@@ -1,6 +1,5 @@
 import type { StorageAdapter } from '../core/types.js';
-import { toTrainingDataset, filterHighQuality, datasetStats } from './dataset.js';
-import type { ScoredTurn } from './dataset.js';
+import { datasetStats } from './dataset.js';
 
 export interface SchedulerConfig {
   /** Storage adapter to fetch scored turns */
@@ -22,6 +21,7 @@ export type SchedulerStatus = 'idle' | 'checking' | 'ready' | 'stopped';
 export class TrainScheduler {
   private timer: ReturnType<typeof setInterval> | null = null;
   private status: SchedulerStatus = 'idle';
+  private checking = false; // Re-entry guard
   private config: Required<SchedulerConfig>;
 
   constructor(config: SchedulerConfig) {
@@ -46,6 +46,7 @@ export class TrainScheduler {
       this.timer = null;
     }
     this.status = 'stopped';
+    this.checking = false;
   }
 
   getStatus(): SchedulerStatus {
@@ -53,7 +54,9 @@ export class TrainScheduler {
   }
 
   private async check(): Promise<void> {
-    if (this.status === 'stopped') return;
+    // Re-entry guard — skip if already checking or stopped
+    if (this.checking || this.status === 'stopped') return;
+    this.checking = true;
     this.status = 'checking';
 
     try {
@@ -62,17 +65,12 @@ export class TrainScheduler {
         { limit: 500 },
       );
 
-      // We only have ResponseScore from the adapter, need to construct ScoredTurns
-      // In practice, the caller would maintain the full turn data
-      // For now, check if we have enough positive high-confidence scores
       const highConfPositive = rawScores.filter(
         (s) => s.quality === 1 && s.confidence >= this.config.minConfidence,
       );
 
       if (highConfPositive.length >= this.config.minSamples) {
         this.status = 'ready';
-        // The actual dataset construction requires full turns, which the caller provides
-        // Signal readiness
         await this.config.onReady('', {
           total_turns: rawScores.length,
           positive: rawScores.filter((s) => s.quality === 1).length,
@@ -89,6 +87,8 @@ export class TrainScheduler {
       this.status = 'idle';
     } catch {
       this.status = 'idle';
+    } finally {
+      this.checking = false;
     }
   }
 }

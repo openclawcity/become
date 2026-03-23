@@ -94,25 +94,30 @@ export function datasetStats(scoredTurns: ScoredTurn[]): {
   skills_covered: string[];
   avg_confidence: number;
 } {
-  const positive = scoredTurns.filter((st) => st.score.quality === 1);
-  const negative = scoredTurns.filter((st) => st.score.quality === -1);
-  const neutral = scoredTurns.filter((st) => st.score.quality === 0);
-
+  let positive = 0;
+  let negative = 0;
+  let neutral = 0;
+  let totalConfidence = 0;
   const skills = new Set<string>();
+
   for (const st of scoredTurns) {
+    if (st.score.quality === 1) positive++;
+    else if (st.score.quality === -1) negative++;
+    else neutral++;
+
+    totalConfidence += st.score.confidence;
+
     for (const s of st.score.skill_signals) {
       skills.add(s);
     }
   }
 
-  const totalConfidence = scoredTurns.reduce((sum, st) => sum + st.score.confidence, 0);
-
   return {
     total_turns: scoredTurns.length,
-    positive: positive.length,
-    negative: negative.length,
-    neutral: neutral.length,
-    training_examples: positive.length,
+    positive,
+    negative,
+    neutral,
+    training_examples: positive,
     skills_covered: [...skills],
     avg_confidence: scoredTurns.length > 0
       ? Math.round((totalConfidence / scoredTurns.length) * 100) / 100

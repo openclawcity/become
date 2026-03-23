@@ -273,8 +273,12 @@ export class SQLiteStore implements StorageAdapter {
       this.db.prepare('INSERT INTO become_milestones (agent_id, milestone_type, threshold, skill, evidence_id, achieved_at) VALUES (?, ?, ?, ?, ?, ?)')
         .run(milestone.agent_id, milestone.milestone_type, milestone.threshold, milestone.skill, milestone.evidence_id, milestone.achieved_at);
       return true;
-    } catch {
-      return false; // UNIQUE constraint violation = already exists
+    } catch (err: any) {
+      // Only treat UNIQUE constraint violations as "already exists"
+      if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' || err.message?.includes('UNIQUE constraint')) {
+        return false;
+      }
+      throw err; // Re-throw actual errors (disk full, schema, etc.)
     }
   }
 

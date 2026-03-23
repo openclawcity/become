@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 export interface TrainConfig {
   /** Path to base model or HuggingFace model ID */
@@ -22,9 +22,39 @@ export interface TrainConfig {
 export interface TrainingResult {
   success: boolean;
   adapter_path?: string;
-  adapter_size_mb?: number;
   epochs_completed?: number;
   error?: string;
+}
+
+// Allowlist for safe characters in paths and model names
+const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-./: ]+$/;
+const SAFE_MODEL_REGEX = /^[a-zA-Z0-9_\-./]+$/;
+
+function validateTrainInput(config: TrainConfig): string | null {
+  if (!SAFE_MODEL_REGEX.test(config.baseModel)) {
+    return `Invalid base model name: contains disallowed characters`;
+  }
+  if (!SAFE_PATH_REGEX.test(config.dataset)) {
+    return `Invalid dataset path: contains disallowed characters`;
+  }
+  if (!SAFE_PATH_REGEX.test(config.outputDir)) {
+    return `Invalid output directory: contains disallowed characters`;
+  }
+  if (config.epochs !== undefined && (config.epochs < 1 || config.epochs > 100)) {
+    return `Epochs must be between 1 and 100`;
+  }
+  if (config.rank !== undefined && (config.rank < 1 || config.rank > 256)) {
+    return `LoRA rank must be between 1 and 256`;
+  }
+  if (config.lr !== undefined && (config.lr <= 0 || config.lr > 1)) {
+    return `Learning rate must be between 0 and 1`;
+  }
+  return null;
+}
+
+/** Escape a string for safe embedding in a Python string literal */
+function escapePython(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 }
 
 /**
@@ -45,39 +75,46 @@ export function trainLoRA(config: TrainConfig): TrainingResult {
     lr = 2e-4,
   } = config;
 
-  // Validate inputs
+  // Validate all inputs before any file or process operations
+  const validationError = validateTrainInput(config);
+  if (validationError) {
+    return { success: false, error: validationError };
+  }
+
   if (!existsSync(dataset)) {
     return { success: false, error: `Dataset not found: ${dataset}` };
   }
 
-  if (!existsSync(outputDir)) {
-    mkdirSync(outputDir, { recursive: true });
+  const safeOutputDir = resolve(outputDir);
+  if (!existsSync(safeOutputDir)) {
+    mkdirSync(safeOutputDir, { recursive: true });
   }
 
-  // Generate training script
+  // Generate training script with escaped values
   const script = backend === 'unsloth'
-    ? generateUnslothScript(baseModel, dataset, outputDir, epochs, rank, lr)
-    : generateAxolotlConfig(baseModel, dataset, outputDir, epochs, rank, lr);
+    ? generateUnslothScript(escapePython(baseModel), escapePython(dataset), escapePython(safeOutputDir), epochs, rank, lr)
+    : generateAxolotlConfig(baseModel, dataset, safeOutputDir, epochs, rank, lr);
 
-  const scriptPath = join(outputDir, backend === 'unsloth' ? 'train.py' : 'config.yml');
+  const scriptPath = join(safeOutputDir, backend === 'unsloth' ? 'train.py' : 'config.yml');
   writeFileSync(scriptPath, script, 'utf-8');
 
   try {
     if (backend === 'unsloth') {
-      execSync(`python3 ${scriptPath}`, {
-        cwd: outputDir,
-        timeout: 3600000, // 1 hour max
+      // Use execFileSync to avoid shell injection — passes args as array, not string
+      execFileSync('python3', [scriptPath], {
+        cwd: safeOutputDir,
+        timeout: 3600000,
         stdio: 'pipe',
       });
     } else {
-      execSync(`accelerate launch -m axolotl.cli.train ${scriptPath}`, {
-        cwd: outputDir,
+      execFileSync('accelerate', ['launch', '-m', 'axolotl.cli.train', scriptPath], {
+        cwd: safeOutputDir,
         timeout: 3600000,
         stdio: 'pipe',
       });
     }
 
-    const adapterPath = join(outputDir, 'adapter');
+    const adapterPath = join(safeOutputDir, 'adapter');
     return {
       success: true,
       adapter_path: adapterPath,
@@ -102,7 +139,6 @@ from unsloth import FastLanguageModel
 from datasets import load_dataset
 from trl import SFTTrainer
 from transformers import TrainingArguments
-import json, os
 
 model, tokenizer = FastLanguageModel.from_pretrained(
     model_name="${model}",
