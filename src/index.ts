@@ -47,6 +47,8 @@ export { SkillEvolver } from './learn/skill-evolver.js';
 export type { GeneratedSkill, EvolveLLM } from './learn/skill-evolver.js';
 export { SkillPruner } from './learn/skill-pruner.js';
 export { parseSkillFile, importSkillDirectory } from './learn/import.js';
+export { AgentLearningEngine } from './learn/agent-conversations.js';
+export type { AgentExchange, LearnedInstruction, ConversationAnalyzer } from './learn/agent-conversations.js';
 
 // Social
 export { PeerReviewProtocol } from './social/peer-review.js';
