@@ -4,13 +4,26 @@ import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import type { BecomeConfig } from '../config.js';
 
+// NanoClaw .env lives in the project root (where nanoclaw was cloned/installed).
+// NOT in ~/.nanoclaw/ (that doesn't exist).
+// Source: https://github.com/qwibitai/nanoclaw src/env.ts reads process.cwd()/.env
 const BACKUP_PATH = join(homedir(), '.become', 'state', 'original_nanoclaw.env');
 const PATCHED_ENV_PATH_FILE = join(homedir(), '.become', 'state', 'nanoclaw_env_path.txt');
+
+// NanoClaw uses ANTHROPIC_BASE_URL for custom LLM endpoints.
+// It routes everything through a credential proxy (OneCLI) that
+// forwards to Anthropic or a custom ANTHROPIC_BASE_URL.
+// Source: GitHub README, src/config.ts
+const NANOCLAW_URL_VAR = 'ANTHROPIC_BASE_URL';
 
 export function patchNanoClaw(config: BecomeConfig): void {
   const envPath = findNanoClawEnv();
   if (!envPath) {
-    throw new Error('Could not find NanoClaw .env. Set ANTHROPIC_BASE_URL manually to http://127.0.0.1:' + config.proxy_port);
+    throw new Error(
+      'Could not find NanoClaw .env file.\n' +
+      'NanoClaw stores .env in its project root (where you cloned it).\n' +
+      `Set ${NANOCLAW_URL_VAR}=http://127.0.0.1:${config.proxy_port} manually in your NanoClaw .env file.`
+    );
   }
 
   // Don't patch twice
@@ -26,10 +39,12 @@ export function patchNanoClaw(config: BecomeConfig): void {
 
   // Patch
   patchDotEnv(envPath, {
-    ANTHROPIC_BASE_URL: `http://127.0.0.1:${config.proxy_port}`,
+    [NANOCLAW_URL_VAR]: `http://127.0.0.1:${config.proxy_port}`,
   });
 
-  // Restart
+  console.log(`  env file: ${envPath}`);
+  console.log(`  patched: ${NANOCLAW_URL_VAR} -> localhost:${config.proxy_port}`);
+
   restartNanoClaw();
 }
 
@@ -38,7 +53,7 @@ export function restoreNanoClaw(): void {
     return;
   }
 
-  // Use stored path (not re-discovered) to avoid restoring to wrong file
+  // Use stored path to avoid restoring to wrong file
   let envPath: string | null = null;
   if (existsSync(PATCHED_ENV_PATH_FILE)) {
     envPath = readFileSync(PATCHED_ENV_PATH_FILE, 'utf-8').trim();
@@ -60,7 +75,9 @@ export function restoreNanoClaw(): void {
 function findNanoClawEnv(): string | null {
   const candidates: string[] = [];
 
-  // Check launchd plist for macOS: extract WorkingDirectory
+  // macOS: extract WorkingDirectory from launchd plist
+  // Label: com.nanoclaw, plist at ~/Library/LaunchAgents/com.nanoclaw.plist
+  // Source: launchd/com.nanoclaw.plist template, setup/service.ts
   const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.nanoclaw.plist');
   if (existsSync(plistPath)) {
     try {
@@ -70,17 +87,29 @@ function findNanoClawEnv(): string | null {
     } catch {}
   }
 
-  // Check systemd unit for Linux: extract WorkingDirectory
-  const unitPath = join(homedir(), '.config', 'systemd', 'user', 'nanoclaw.service');
-  if (existsSync(unitPath)) {
+  // Linux: extract WorkingDirectory from systemd user unit
+  // Unit: ~/.config/systemd/user/nanoclaw.service
+  // Source: setup/service.ts
+  const userUnit = join(homedir(), '.config', 'systemd', 'user', 'nanoclaw.service');
+  if (existsSync(userUnit)) {
     try {
-      const unit = readFileSync(unitPath, 'utf-8');
+      const unit = readFileSync(userUnit, 'utf-8');
       const match = unit.match(/WorkingDirectory=(.+)/);
       if (match) candidates.push(join(match[1].trim(), '.env'));
     } catch {}
   }
 
-  // Common install locations
+  // Linux root: /etc/systemd/system/nanoclaw.service
+  const rootUnit = '/etc/systemd/system/nanoclaw.service';
+  if (existsSync(rootUnit)) {
+    try {
+      const unit = readFileSync(rootUnit, 'utf-8');
+      const match = unit.match(/WorkingDirectory=(.+)/);
+      if (match) candidates.push(join(match[1].trim(), '.env'));
+    } catch {}
+  }
+
+  // Common clone locations
   candidates.push(join(homedir(), 'nanoclaw', '.env'));
   candidates.push('/opt/nanoclaw/.env');
 
@@ -90,21 +119,35 @@ function findNanoClawEnv(): string | null {
   return null;
 }
 
+// NanoClaw restart:
+// macOS: launchctl unload + load (label: com.nanoclaw)
+// Linux user: systemctl --user restart nanoclaw
+// Linux root: sudo systemctl restart nanoclaw
+// Source: setup/service.ts, launchd/com.nanoclaw.plist
 function restartNanoClaw(): void {
   console.log('Restarting NanoClaw...');
-  try {
-    execSync('launchctl kickstart -k gui/$(id -u)/com.nanoclaw', { stdio: 'pipe', timeout: 15000 });
-    console.log('NanoClaw restarted.');
-  } catch {
+
+  // macOS: unload + load the plist
+  const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.nanoclaw.plist');
+  if (existsSync(plistPath)) {
     try {
-      execSync('systemctl --user restart nanoclaw', { stdio: 'pipe', timeout: 15000 });
+      execSync(`launchctl unload "${plistPath}"`, { stdio: 'pipe', timeout: 10000 });
+      execSync(`launchctl load "${plistPath}"`, { stdio: 'pipe', timeout: 10000 });
       console.log('NanoClaw restarted.');
-    } catch {
-      console.log('\n*** NanoClaw needs a manual restart. ***');
-      console.log('*** macOS: launchctl kickstart -k gui/$(id -u)/com.nanoclaw ***');
-      console.log('*** Linux: systemctl --user restart nanoclaw ***\n');
-    }
+      return;
+    } catch {}
   }
+
+  // Linux user-level systemd
+  try {
+    execSync('systemctl --user restart nanoclaw', { stdio: 'pipe', timeout: 10000 });
+    console.log('NanoClaw restarted.');
+    return;
+  } catch {}
+
+  console.log('\n*** NanoClaw needs a manual restart. ***');
+  console.log('*** macOS: launchctl unload ~/Library/LaunchAgents/com.nanoclaw.plist && launchctl load ~/Library/LaunchAgents/com.nanoclaw.plist ***');
+  console.log('*** Linux: systemctl --user restart nanoclaw ***\n');
 }
 
 function patchDotEnv(path: string, vars: Record<string, string>): void {

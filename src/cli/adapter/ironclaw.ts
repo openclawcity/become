@@ -4,7 +4,9 @@ import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import type { BecomeConfig } from '../config.js';
 
-const IRONCLAW_ENV = join(homedir(), '.ironclaw', '.env');
+// IronClaw .env is at ~/.ironclaw/.env (overridable via IRONCLAW_BASE_DIR)
+// Source: https://github.com/nearai/ironclaw src/service.rs, .env.example
+const IRONCLAW_ENV = join(process.env.IRONCLAW_BASE_DIR ?? join(homedir(), '.ironclaw'), '.env');
 const BACKUP_PATH = join(homedir(), '.become', 'state', 'original_ironclaw.env');
 
 export function patchIronClaw(config: BecomeConfig): void {
@@ -22,37 +24,84 @@ export function patchIronClaw(config: BecomeConfig): void {
   mkdirSync(join(homedir(), '.become', 'state'), { recursive: true });
   copyFileSync(IRONCLAW_ENV, BACKUP_PATH);
 
-  // Patch
-  patchDotEnv(IRONCLAW_ENV, {
-    LLM_BASE_URL: `http://127.0.0.1:${config.proxy_port}`,
-  });
+  // Read current .env to determine which var to patch
+  // IronClaw uses LLM_BACKEND to select provider. Each provider has its own base URL var.
+  // Source: src/config/llm.rs
+  const content = readFileSync(IRONCLAW_ENV, 'utf-8');
+  const backendMatch = content.match(/^LLM_BACKEND=(.+)$/m);
+  const backend = backendMatch?.[1]?.trim().toLowerCase() ?? 'openai_compatible';
 
-  console.log('Restarting IronClaw...');
-  try {
-    execSync('ironclaw daemon restart', { stdio: 'pipe', timeout: 15000 });
-    console.log('IronClaw restarted.');
-  } catch {
-    console.log('\n*** IronClaw needs a manual restart. ***');
-    console.log('*** Run: ironclaw daemon restart ***\n');
+  const proxyUrl = `http://127.0.0.1:${config.proxy_port}`;
+  const vars: Record<string, string> = {};
+
+  // Patch the correct base URL var for the active backend
+  switch (backend) {
+    case 'anthropic':
+      vars['ANTHROPIC_BASE_URL'] = proxyUrl;
+      break;
+    case 'ollama':
+      vars['OLLAMA_BASE_URL'] = proxyUrl;
+      break;
+    case 'nearai':
+    case 'near_ai':
+    case 'near':
+      vars['NEARAI_BASE_URL'] = proxyUrl;
+      break;
+    default:
+      // openai, openai_compatible, openrouter, or any unknown value
+      vars['LLM_BASE_URL'] = proxyUrl;
+      break;
   }
+
+  patchDotEnv(IRONCLAW_ENV, vars);
+
+  console.log(`  backend: ${backend}`);
+  console.log(`  patched: ${Object.keys(vars).join(', ')} -> localhost:${config.proxy_port}`);
+
+  restartIronClaw();
 }
 
 export function restoreIronClaw(): void {
   if (!existsSync(BACKUP_PATH)) {
-    // Nothing to restore
     return;
   }
   copyFileSync(BACKUP_PATH, IRONCLAW_ENV);
   try { unlinkSync(BACKUP_PATH); } catch {}
+  restartIronClaw();
+}
 
+// IronClaw has no `restart` command. Must stop + start.
+// CLI: ironclaw service {install,start,stop,status,uninstall}
+// macOS label: com.ironclaw.daemon
+// Linux unit: ironclaw.service (~/.config/systemd/user/)
+// Source: src/cli/service.rs, src/service.rs
+function restartIronClaw(): void {
   console.log('Restarting IronClaw...');
+
+  // Try CLI stop + start first
   try {
-    execSync('ironclaw daemon restart', { stdio: 'pipe', timeout: 15000 });
+    execSync('ironclaw service stop', { stdio: 'pipe', timeout: 10000 });
+    execSync('ironclaw service start', { stdio: 'pipe', timeout: 10000 });
     console.log('IronClaw restarted.');
-  } catch {
-    console.log('\n*** IronClaw needs a manual restart. ***');
-    console.log('*** Run: ironclaw daemon restart ***\n');
-  }
+    return;
+  } catch {}
+
+  // Fallback: try launchctl (macOS)
+  try {
+    execSync('launchctl kickstart -k gui/$(id -u)/com.ironclaw.daemon', { stdio: 'pipe', timeout: 10000 });
+    console.log('IronClaw restarted via launchctl.');
+    return;
+  } catch {}
+
+  // Fallback: try systemd (Linux)
+  try {
+    execSync('systemctl --user restart ironclaw', { stdio: 'pipe', timeout: 10000 });
+    console.log('IronClaw restarted via systemd.');
+    return;
+  } catch {}
+
+  console.log('\n*** IronClaw needs a manual restart. ***');
+  console.log('*** Run: ironclaw service stop && ironclaw service start ***\n');
 }
 
 function patchDotEnv(path: string, vars: Record<string, string>): void {
