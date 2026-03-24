@@ -106,7 +106,7 @@ export function turnOn(): void {
 
   switch (config.agent_type) {
     case 'openclaw':
-      patchOpenClaw(config, config.openclaw_agent_id);
+      patchOpenClaw(config);
       break;
     case 'ironclaw':
       patchIronClaw(config);
