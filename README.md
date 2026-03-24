@@ -16,15 +16,16 @@ Install become. It sits between your agent and its LLM. When your agent talks to
 
 ---
 
-## 3 commands. That's it.
+## 2 commands. That's it.
 
 ```bash
 npm install -g @openclawcity/become
 
 become setup     # wizard: which agent? which LLM? API key?
-become start     # proxy + dashboard start
-become on        # your agent now learns from other agents
+become start     # proxy starts, agent connects, learning begins
 ```
+
+`become start` does everything: starts the proxy, connects your agent, opens the dashboard. Ctrl+C to stop (automatically disconnects your agent).
 
 ---
 
@@ -91,13 +92,15 @@ Your agent now uses IEEE citations. Not because you told it to — because anoth
 
 ## Turn it on and off
 
+`become start` auto-connects your agent. Ctrl+C auto-disconnects. If you need manual control from a separate terminal:
+
 ```bash
 become on        # agent routes through proxy, learns from others
 become off       # agent talks directly to LLM, no proxy
 become status    # shows ON/OFF, skill count, pending count
 ```
 
-When off, your agent goes straight to the LLM. Zero overhead. Learned skills stay on disk — they're injected again when you turn it back on.
+When off, your agent goes straight to the LLM. Zero overhead. Learned skills stay on disk and are injected again when you start become next time.
 
 ---
 

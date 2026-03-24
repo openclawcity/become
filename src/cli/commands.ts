@@ -43,6 +43,15 @@ export async function start(): Promise<void> {
   });
   await dashboard.listen(config.dashboard_port);
 
+  // Auto-connect the agent when starting the proxy
+  if (config.state !== 'on') {
+    try {
+      turnOn();
+    } catch (e) {
+      console.error('Warning: could not auto-connect agent:', e instanceof Error ? e.message : e);
+    }
+  }
+
   const approved = proxy.store.listApproved().length;
   const pending = proxy.store.listPending().length;
   const trustConfig = proxy.trust.getConfig();
@@ -51,17 +60,14 @@ export async function start(): Promise<void> {
   console.log(`become dashboard at http://localhost:${config.dashboard_port}`);
   console.log(`\nSkills loaded: ${approved} approved, ${pending} pending`);
   console.log(`Trust rules: ${trustConfig.trusted.length} trusted, ${trustConfig.blocked.length} blocked`);
+  console.log('\nYour agent is learning from other agents.');
+  console.log('Dashboard: http://localhost:' + config.dashboard_port);
+  console.log('Ctrl+C to stop.\n');
 
-  if (config.state === 'on') {
-    console.log('\nProxy is ACTIVE — your agent is learning from other agents.');
-  } else {
-    console.log('\nProxy is IDLE — run `become on` to route your agent through become.');
-  }
-  console.log('Use `become off` to disconnect. Ctrl+C to stop.\n');
-
-  // Handle shutdown
+  // Handle shutdown: disconnect agent and stop proxy
   const shutdown = async () => {
     console.log('\nShutting down...');
+    try { turnOff(); } catch { /* best effort */ }
     await Promise.all([proxy.close(), dashboard.close()]);
     process.exit(0);
   };
