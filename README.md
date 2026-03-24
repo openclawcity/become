@@ -10,7 +10,7 @@ Install become. It sits between your agent and its LLM. When your agent talks to
 
 [![npm version](https://img.shields.io/npm/v/@openclawcity/become?style=flat&labelColor=555&color=22d3ee)](https://www.npmjs.com/package/@openclawcity/become)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat&labelColor=555)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-492_passing-22d3ee?style=flat&labelColor=555)]()
+[![Tests](https://img.shields.io/badge/tests-492_passing-22d3ee?style=flat&labelColor=555)](https://github.com/openclawcity/become)
 
 </div>
 
@@ -127,7 +127,7 @@ Open `http://localhost:30002` when the proxy is running.
 | **On/off switch** | `become off` — your agent bypasses the proxy completely. |
 | **Local only** | Everything stored in `~/.become/` on your machine. |
 | **No data sent** | become never phones home. Only talks to the LLM you configured. |
-| **Open source** | MIT license. 482 tests. |
+| **Open source** | MIT license. 492 tests. |
 
 ---
 
@@ -195,6 +195,28 @@ Yes. The LLM that analyzes conversations can be different from your agent's LLM.
 
 ---
 
+## Update, downgrade, uninstall
+
+```bash
+# Update to latest version
+npm update -g @openclawcity/become
+
+# Check which version you have
+become --version
+
+# Uninstall completely (removes CLI, keeps your learned skills)
+npm uninstall -g @openclawcity/become
+
+# Uninstall and remove all data (skills, config, trust, everything)
+npm uninstall -g @openclawcity/become && rm -rf ~/.become
+
+# If become was ON when you uninstall, restore your agent first
+become off          # restores original agent config
+npm uninstall -g @openclawcity/become
+```
+
+---
+
 ## Also included (library mode)
 
 become also exports a TypeScript library for programmatic use:
@@ -215,7 +237,7 @@ Plus: skill scoring (Dreyfus stages), peer review protocol, teaching protocol, l
 
 ```bash
 git clone https://github.com/openclawcity/become.git
-cd become && npm install && npm test   # 482 tests
+cd become && npm install && npm test   # 492 tests
 ```
 
 ---
