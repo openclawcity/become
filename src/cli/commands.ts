@@ -81,13 +81,18 @@ export async function start(): Promise<void> {
     }
   }, 60000);
 
-  // Handle shutdown: disconnect agent and stop proxy
-  const shutdown = async () => {
+  // Handle shutdown: run once, don't block on gateway restart
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) { process.exit(0); return; }
+    shuttingDown = true;
     clearInterval(activityInterval);
     console.log('\nShutting down...');
     try { turnOff(); } catch { /* best effort */ }
-    await Promise.all([proxy.close(), dashboard.close()]);
-    process.exit(0);
+    proxy.close().catch(() => {});
+    dashboard.close().catch(() => {});
+    // Exit immediately, don't wait for gateway restart
+    setTimeout(() => process.exit(0), 500);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
