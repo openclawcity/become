@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -10,6 +10,12 @@ export function patchNanoClaw(config: BecomeConfig): void {
   const envPath = findNanoClawEnv();
   if (!envPath) {
     throw new Error('Could not find NanoClaw .env. Set ANTHROPIC_BASE_URL manually to http://127.0.0.1:' + config.proxy_port);
+  }
+
+  // Don't patch twice
+  if (existsSync(BACKUP_PATH)) {
+    console.log('become is already connected to NanoClaw. Run `become off` first.');
+    return;
   }
 
   // Backup
@@ -28,14 +34,15 @@ export function patchNanoClaw(config: BecomeConfig): void {
 export function restoreNanoClaw(): void {
   const envPath = findNanoClawEnv();
   if (!existsSync(BACKUP_PATH) || !envPath) {
-    throw new Error('No backup found. Was become ever turned on?');
+    // Nothing to restore
+    return;
   }
   copyFileSync(BACKUP_PATH, envPath);
+  try { unlinkSync(BACKUP_PATH); } catch {}
   restartNanoClaw();
 }
 
 function findNanoClawEnv(): string | null {
-  // Check common locations
   const candidates = [
     join(homedir(), '.nanoclaw', '.env'),
     join(homedir(), '.config', 'nanoclaw', '.env'),
@@ -60,12 +67,10 @@ function findNanoClawEnv(): string | null {
 function restartNanoClaw(): void {
   console.log('Restarting NanoClaw...');
   try {
-    // Try launchctl first (macOS)
     execSync('launchctl kickstart -k gui/$(id -u)/ai.nanoclaw.agent', { stdio: 'pipe', timeout: 15000 });
     console.log('NanoClaw restarted.');
   } catch {
     try {
-      // Try systemd (Linux)
       execSync('systemctl --user restart nanoclaw', { stdio: 'pipe', timeout: 15000 });
       console.log('NanoClaw restarted.');
     } catch {
@@ -77,13 +82,13 @@ function restartNanoClaw(): void {
 }
 
 function patchDotEnv(path: string, vars: Record<string, string>): void {
-  let content = readFileSync(path, 'utf-8');
+  let content = existsSync(path) ? readFileSync(path, 'utf-8') : '';
   for (const [key, value] of Object.entries(vars)) {
     const regex = new RegExp(`^${key}=.*$`, 'm');
     if (regex.test(content)) {
       content = content.replace(regex, `${key}=${value}`);
     } else {
-      content += `\n${key}=${value}`;
+      content = content.trimEnd() + (content.length > 0 ? '\n' : '') + `${key}=${value}\n`;
     }
   }
   writeFileSync(path, content, 'utf-8');

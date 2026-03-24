@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { loadConfig, saveConfig, getBecomeDir } from './config.js';
+import { loadConfig, saveConfig, getBecomeDir, type BecomeConfig } from './config.js';
 import { createProxyServer, type ProxyConfig } from '../proxy/server.js';
 import { createDashboardServer } from '../dashboard/server.js';
 import { FileSkillStore } from '../skills/store.js';
@@ -9,6 +9,26 @@ import { TrustManager } from '../skills/trust.js';
 import { patchOpenClaw, restoreOpenClaw } from './adapter/openclaw.js';
 import { patchIronClaw, restoreIronClaw } from './adapter/ironclaw.js';
 import { patchNanoClaw, restoreNanoClaw } from './adapter/nanoclaw.js';
+import { OpenAIAdapter, AnthropicAdapter, OllamaAdapter } from '../adapters/llm.js';
+import type { ConversationAnalyzer } from '../learn/agent-conversations.js';
+
+/**
+ * Create the LLM analyzer for lesson extraction.
+ * This calls the LLM DIRECTLY (not through the proxy) to analyze conversations.
+ */
+function createAnalyzer(config: BecomeConfig): ConversationAnalyzer {
+  switch (config.llm_provider) {
+    case 'anthropic':
+      return { analyze: (p) => new AnthropicAdapter({ apiKey: config.llm_api_key }).complete(p) };
+    case 'ollama':
+      return { analyze: (p) => new OllamaAdapter({ baseUrl: config.llm_base_url }).complete(p) };
+    case 'openai':
+    case 'openrouter':
+    case 'custom':
+    default:
+      return { analyze: (p) => new OpenAIAdapter({ apiKey: config.llm_api_key, baseUrl: config.llm_base_url }).complete(p) };
+  }
+}
 
 export async function start(): Promise<void> {
   const config = loadConfig();
@@ -32,7 +52,8 @@ export async function start(): Promise<void> {
     if (saved) originalUpstreamUrl = saved;
   }
 
-  const proxy = createProxyServer(proxyConfig, undefined, originalUpstreamUrl);
+  const analyzer = createAnalyzer(config);
+  const proxy = createProxyServer(proxyConfig, analyzer, originalUpstreamUrl);
   await proxy.listen();
 
   // Start dashboard
