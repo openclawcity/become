@@ -2,11 +2,25 @@
 
 import { runSetup } from './setup.js';
 import { start, turnOn, turnOff, showStatus } from './commands.js';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const command = process.argv[2];
 
-// Read version from package.json at build time
-const VERSION = '1.0.2';
+// Read version from package.json
+let VERSION = 'unknown';
+try {
+  // Works in both dev (src/) and dist (dist/) because package.json is at root
+  const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+  VERSION = JSON.parse(readFileSync(pkgPath, 'utf-8')).version;
+} catch {
+  try {
+    // Fallback: two levels up (for nested dist structures)
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
+    VERSION = JSON.parse(readFileSync(pkgPath, 'utf-8')).version;
+  } catch { /* use 'unknown' */ }
+}
 
 async function main() {
   switch (command) {

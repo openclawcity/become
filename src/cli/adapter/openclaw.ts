@@ -30,13 +30,17 @@ export function patchOpenClaw(config: BecomeConfig, agentId?: string): void {
   }
 
   const raw = readFileSync(OPENCLAW_CONFIG, 'utf-8');
-  const clawConfig = JSON.parse(raw);
+  const clawConfig = parseOpenClawConfig(raw);
 
-  // Backup original (only if not already patched by become)
-  mkdirSync(join(homedir(), '.become', 'state'), { recursive: true });
-  if (!clawConfig.models?.providers?.become) {
-    writeFileSync(BACKUP_PATH, raw, 'utf-8');
+  // Refuse to patch if already patched (prevents double-patch corruption)
+  if (clawConfig.models?.providers?.become) {
+    console.log('become is already connected. Run `become off` first to disconnect.');
+    return;
   }
+
+  // Backup original
+  mkdirSync(join(homedir(), '.become', 'state'), { recursive: true });
+  writeFileSync(BACKUP_PATH, raw, 'utf-8');
 
   // Determine which agent to patch
   const agents: OpenClawAgent[] = clawConfig.agents?.list ?? [];
@@ -52,26 +56,29 @@ export function patchOpenClaw(config: BecomeConfig, agentId?: string): void {
     originalModel = agent.model ?? clawConfig.agents?.defaults?.model?.primary ?? '';
     patchedAgentId = agentId;
 
-    // Store original model, then patch this agent's model
-    writeFileSync(ORIGINAL_MODEL_PATH, originalModel, 'utf-8');
-    writeFileSync(PATCHED_AGENT_PATH, patchedAgentId, 'utf-8');
-
     const modelId = stripProvider(originalModel);
+    if (!modelId) {
+      throw new Error('No model configured for this agent. Set a model in openclaw.json first.');
+    }
     agent.model = `become/${modelId}`;
   } else {
     // No agents.list or no specific agent requested: patch defaults
     originalModel = clawConfig.agents?.defaults?.model?.primary ?? '';
     patchedAgentId = '_defaults';
 
-    writeFileSync(ORIGINAL_MODEL_PATH, originalModel, 'utf-8');
-    writeFileSync(PATCHED_AGENT_PATH, patchedAgentId, 'utf-8');
-
     const modelId = stripProvider(originalModel);
+    if (!modelId) {
+      throw new Error('No default model configured. Set agents.defaults.model.primary in openclaw.json first.');
+    }
     if (!clawConfig.agents) clawConfig.agents = {};
     if (!clawConfig.agents.defaults) clawConfig.agents.defaults = {};
     if (!clawConfig.agents.defaults.model) clawConfig.agents.defaults.model = {};
     clawConfig.agents.defaults.model.primary = `become/${modelId}`;
   }
+
+  // Store original model and patched agent for restore
+  writeFileSync(ORIGINAL_MODEL_PATH, originalModel, 'utf-8');
+  writeFileSync(PATCHED_AGENT_PATH, patchedAgentId, 'utf-8');
 
   // Add become as a provider
   // Schema: https://docs.openclaw.ai/gateway/configuration-reference
@@ -107,7 +114,7 @@ export function restoreOpenClaw(): void {
   // If we have a clean backup, use it
   if (existsSync(BACKUP_PATH)) {
     const backup = readFileSync(BACKUP_PATH, 'utf-8');
-    const backupConfig = JSON.parse(backup);
+    const backupConfig = parseOpenClawConfig(backup);
     if (!backupConfig.models?.providers?.become) {
       writeFileSync(OPENCLAW_CONFIG, backup, 'utf-8');
       restartGateway();
@@ -117,7 +124,7 @@ export function restoreOpenClaw(): void {
 
   // Backup is missing or corrupted; manually restore
   const raw = readFileSync(OPENCLAW_CONFIG, 'utf-8');
-  const config = JSON.parse(raw);
+  const config = parseOpenClawConfig(raw);
 
   // Read which agent was patched and what the original model was
   const patchedAgentId = readStateFile(PATCHED_AGENT_PATH);
@@ -164,9 +171,9 @@ export function listOpenClawAgents(): { id: string; model: string }[] {
   if (!existsSync(OPENCLAW_CONFIG)) return [];
 
   try {
-    const config = JSON.parse(readFileSync(OPENCLAW_CONFIG, 'utf-8'));
+    const config = parseOpenClawConfig(readFileSync(OPENCLAW_CONFIG, 'utf-8'));
     const agents: OpenClawAgent[] = config.agents?.list ?? [];
-    const defaultModel = config.agents?.defaults?.model?.primary ?? 'unknown';
+    const defaultModel = unbecome(config.agents?.defaults?.model?.primary ?? 'unknown');
 
     if (agents.length === 0) {
       return [{ id: '_defaults', model: defaultModel }];
@@ -174,7 +181,7 @@ export function listOpenClawAgents(): { id: string; model: string }[] {
 
     return agents.map((a) => ({
       id: a.id,
-      model: a.model ?? defaultModel,
+      model: unbecome(a.model ?? defaultModel),
     }));
   } catch {
     return [];
@@ -184,7 +191,7 @@ export function listOpenClawAgents(): { id: string; model: string }[] {
 export function isOpenClawPatched(): boolean {
   if (!existsSync(OPENCLAW_CONFIG)) return false;
   try {
-    const config = JSON.parse(readFileSync(OPENCLAW_CONFIG, 'utf-8'));
+    const config = parseOpenClawConfig(readFileSync(OPENCLAW_CONFIG, 'utf-8'));
     return !!config.models?.providers?.become;
   } catch {
     return false;
@@ -195,6 +202,24 @@ export function isOpenClawPatched(): boolean {
 
 function stripProvider(model: string): string {
   return model.includes('/') ? model.split('/').slice(1).join('/') : model;
+}
+
+/** Strip the become/ prefix if present (for display purposes) */
+function unbecome(model: string): string {
+  return model.startsWith('become/') ? model.replace('become/', '') : model;
+}
+
+/**
+ * Parse openclaw.json. OpenClaw uses JSON5 (allows comments, trailing commas).
+ * We strip comments and trailing commas before parsing with standard JSON.parse.
+ */
+function parseOpenClawConfig(raw: string): any {
+  // Strip single-line comments (// ...) and multi-line comments (/* ... */)
+  const stripped = raw
+    .replace(/\/\/.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/,\s*([\]}])/g, '$1'); // trailing commas
+  return JSON.parse(stripped);
 }
 
 function readStateFile(path: string): string {
