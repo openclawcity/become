@@ -25,7 +25,7 @@ export interface ProxyStats {
 
 const SKILL_CACHE_TTL_MS = 5000; // Refresh skill cache every 5 seconds
 
-export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAnalyzer) {
+export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAnalyzer, overrideUpstreamUrl?: string) {
   const store = new FileSkillStore({ baseDir: config.baseDir });
   const trust = new TrustManager(config.baseDir);
   const extractor = analyzer ? new LessonExtractor(store, trust, analyzer) : null;
@@ -98,8 +98,8 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
         }
       }
 
-      // Build upstream URL — always match the incoming format
-      const upstreamUrl = buildUpstreamUrl(config, req.url!);
+      // Build upstream URL from the original provider URL (not the become config)
+      const upstreamUrl = buildUpstreamUrl(overrideUpstreamUrl ?? config.llm_base_url, req.url!);
 
       // Build upstream headers
       const upstreamHeaders = buildUpstreamHeaders(config, req.headers);
@@ -206,8 +206,8 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function buildUpstreamUrl(config: ProxyConfig, path: string): string {
-  const base = config.llm_base_url.replace(/\/+$/, '');
+function buildUpstreamUrl(baseUrl: string, path: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
 
   // Forward to the matching upstream endpoint.
   // If agent sends /v1/messages → forward to /v1/messages (Anthropic format)

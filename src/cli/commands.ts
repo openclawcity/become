@@ -1,3 +1,6 @@
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { loadConfig, saveConfig, getBecomeDir } from './config.js';
 import { createProxyServer, type ProxyConfig } from '../proxy/server.js';
 import { createDashboardServer } from '../dashboard/server.js';
@@ -21,7 +24,15 @@ export async function start(): Promise<void> {
     auto_extract: config.auto_extract,
   };
 
-  const proxy = createProxyServer(proxyConfig);
+  // Read original provider URL if available (set by patchOpenClaw)
+  const originalUrlPath = join(homedir(), '.become', 'state', 'original_base_url.txt');
+  let originalUpstreamUrl: string | undefined;
+  if (existsSync(originalUrlPath)) {
+    const saved = readFileSync(originalUrlPath, 'utf-8').trim();
+    if (saved) originalUpstreamUrl = saved;
+  }
+
+  const proxy = createProxyServer(proxyConfig, undefined, originalUpstreamUrl);
   await proxy.listen();
 
   // Start dashboard

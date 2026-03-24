@@ -90,8 +90,9 @@ export function patchOpenClaw(config: BecomeConfig): void {
   writeFileSync(PATCHED_PROVIDER_PATH, `${providerName}:${modelsSource}`, 'utf-8');
 
   // Swap the baseUrl to the proxy
-  // The proxy will forward to the original URL
-  provider.baseUrl = `http://127.0.0.1:${config.proxy_port}/v1`;
+  // Don't append /v1. The proxy accepts whatever path OpenClaw sends
+  // and forwards it to the original upstream URL with the same path.
+  provider.baseUrl = `http://127.0.0.1:${config.proxy_port}`;
 
   // Write back
   if (modelsSource === 'models.json' && modelsJsonPath) {
