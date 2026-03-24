@@ -58,14 +58,32 @@ export async function start(): Promise<void> {
 
   console.log(`\nbecome proxy running on localhost:${config.proxy_port}`);
   console.log(`become dashboard at http://localhost:${config.dashboard_port}`);
-  console.log(`\nSkills loaded: ${approved} approved, ${pending} pending`);
+  console.log(`\nConnected to: ${config.agent_type}${config.openclaw_agent_id ? ` (agent: ${config.openclaw_agent_id})` : ''}`);
+  console.log(`Skills loaded: ${approved} approved, ${pending} pending`);
   console.log(`Trust rules: ${trustConfig.trusted.length} trusted, ${trustConfig.blocked.length} blocked`);
   console.log('\nYour agent is learning from other agents.');
   console.log('Dashboard: http://localhost:' + config.dashboard_port);
-  console.log('Ctrl+C to stop.\n');
+  console.log('Ctrl+C to stop.');
+
+  // Wait a few seconds then check if any request has come through
+  setTimeout(() => {
+    if (proxy.stats.requests_forwarded === 0) {
+      console.log('\nWaiting for first request from your agent...');
+      console.log('(If nothing happens, make sure your agent is running and talking to other agents)');
+    }
+  }, 10000);
+
+  // Periodically log activity so user knows it's working
+  const activityInterval = setInterval(() => {
+    const s = proxy.stats;
+    if (s.requests_forwarded > 0) {
+      console.log(`[become] ${s.requests_forwarded} requests forwarded, ${s.skills_injected} skills injected, ${s.lessons_extracted} lessons extracted`);
+    }
+  }, 60000);
 
   // Handle shutdown: disconnect agent and stop proxy
   const shutdown = async () => {
+    clearInterval(activityInterval);
     console.log('\nShutting down...');
     try { turnOff(); } catch { /* best effort */ }
     await Promise.all([proxy.close(), dashboard.close()]);

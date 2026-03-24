@@ -58,15 +58,20 @@ function findNanoClawEnv(): string | null {
 }
 
 function restartNanoClaw(): void {
+  console.log('Restarting NanoClaw...');
   try {
     // Try launchctl first (macOS)
     execSync('launchctl kickstart -k gui/$(id -u)/ai.nanoclaw.agent', { stdio: 'pipe', timeout: 15000 });
+    console.log('NanoClaw restarted.');
   } catch {
     try {
       // Try systemd (Linux)
       execSync('systemctl --user restart nanoclaw', { stdio: 'pipe', timeout: 15000 });
+      console.log('NanoClaw restarted.');
     } catch {
-      console.log('Warning: Could not restart NanoClaw. Restart it manually.');
+      console.log('\n*** NanoClaw needs a manual restart. ***');
+      console.log('*** macOS: launchctl kickstart -k gui/$(id -u)/ai.nanoclaw.agent ***');
+      console.log('*** Linux: systemctl --user restart nanoclaw ***\n');
     }
   }
 }

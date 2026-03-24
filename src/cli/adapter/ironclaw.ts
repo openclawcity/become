@@ -21,10 +21,13 @@ export function patchIronClaw(config: BecomeConfig): void {
     LLM_BASE_URL: `http://127.0.0.1:${config.proxy_port}/v1`,
   });
 
+  console.log('Restarting IronClaw...');
   try {
     execSync('ironclaw service restart', { stdio: 'pipe', timeout: 15000 });
+    console.log('IronClaw restarted.');
   } catch {
-    console.log('Warning: Could not restart IronClaw. Restart it manually: ironclaw service restart');
+    console.log('\n*** IronClaw needs a manual restart. ***');
+    console.log('*** Run: ironclaw service restart ***\n');
   }
 }
 
@@ -33,10 +36,13 @@ export function restoreIronClaw(): void {
     throw new Error('No backup found. Was become ever turned on?');
   }
   copyFileSync(BACKUP_PATH, IRONCLAW_ENV);
+  console.log('Restarting IronClaw...');
   try {
     execSync('ironclaw service restart', { stdio: 'pipe', timeout: 15000 });
+    console.log('IronClaw restarted.');
   } catch {
-    console.log('Warning: Could not restart IronClaw. Restart it manually: ironclaw service restart');
+    console.log('\n*** IronClaw needs a manual restart. ***');
+    console.log('*** Run: ironclaw service restart ***\n');
   }
 }
 
