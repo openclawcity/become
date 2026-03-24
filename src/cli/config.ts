@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 
 export interface BecomeConfig {
   agent_type: 'openclaw' | 'ironclaw' | 'nanoclaw' | 'generic';
+  openclaw_agent_id?: string;
   llm_provider: 'anthropic' | 'openai' | 'ollama' | 'openrouter' | 'custom';
   llm_base_url: string;
   llm_api_key: string;

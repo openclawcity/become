@@ -1,5 +1,6 @@
 import * as readline from 'node:readline';
 import { saveConfig, LLM_DEFAULTS, type BecomeConfig } from './config.js';
+import { listOpenClawAgents } from './adapter/openclaw.js';
 
 const AGENT_TYPES = ['openclaw', 'ironclaw', 'nanoclaw', 'generic'] as const;
 const LLM_PROVIDERS = ['anthropic', 'openai', 'ollama', 'openrouter', 'custom'] as const;
@@ -21,8 +22,27 @@ export async function runSetup(): Promise<void> {
     const agentIdx = parseInt(agentChoice, 10) - 1;
     const agent_type = AGENT_TYPES[agentIdx] ?? 'openclaw';
 
+    // If OpenClaw, ask which agent to connect
+    let openclaw_agent_id: string | undefined;
+    if (agent_type === 'openclaw') {
+      const agents = listOpenClawAgents();
+      if (agents.length > 1) {
+        console.log('\nWhich OpenClaw agent should learn from other agents?');
+        agents.forEach((a, i) => console.log(`  ${i + 1}. ${a.id} (${a.model})`));
+        const agentPick = await ask(rl, '> ');
+        const pickIdx = parseInt(agentPick, 10) - 1;
+        const picked = agents[pickIdx];
+        if (picked && picked.id !== '_defaults') {
+          openclaw_agent_id = picked.id;
+        }
+      } else if (agents.length === 1 && agents[0].id !== '_defaults') {
+        openclaw_agent_id = agents[0].id;
+        console.log(`\nOpenClaw agent: ${openclaw_agent_id} (${agents[0].model})`);
+      }
+    }
+
     // LLM provider
-    console.log('\nWhich LLM provider?');
+    console.log('\nWhich LLM provider does your agent use?');
     LLM_PROVIDERS.forEach((p, i) => console.log(`  ${i + 1}. ${p}`));
     const llmChoice = await ask(rl, '> ');
     const llmIdx = parseInt(llmChoice, 10) - 1;
@@ -50,6 +70,7 @@ export async function runSetup(): Promise<void> {
 
     const config: BecomeConfig = {
       agent_type,
+      openclaw_agent_id,
       llm_provider,
       llm_base_url,
       llm_api_key: llm_api_key.trim(),
