@@ -51,6 +51,8 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
   }
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    console.log(`[become] ${req.method} ${req.url}`);
+
     // Health check
     if (req.url === '/health' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -58,13 +60,24 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
       return;
     }
 
-    // Only proxy POST requests to LLM endpoints
-    const isOpenAI = req.url === '/v1/chat/completions';
-    const isAnthropic = req.url === '/v1/messages';
+    // Proxy any POST request that looks like an LLM API call
+    // Different providers use different paths:
+    //   OpenAI/OpenRouter: /v1/chat/completions or /chat/completions or /api/v1/chat/completions
+    //   Anthropic: /v1/messages or /messages
+    //   Some proxies: just /
+    const url = req.url ?? '';
+    const isLLMRequest = req.method === 'POST' && (
+      url.includes('/chat/completions') ||
+      url.includes('/messages') ||
+      url === '/' ||
+      url.startsWith('/v1')
+    );
 
-    if (req.method !== 'POST' || (!isOpenAI && !isAnthropic)) {
+    if (!isLLMRequest) {
+      // Log the rejected path so users can debug
+      console.log(`[become] rejected: ${req.method} ${url}`);
       res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found. Use POST /v1/chat/completions or /v1/messages' }));
+      res.end(JSON.stringify({ error: `Not an LLM endpoint: ${req.method} ${url}` }));
       return;
     }
 
