@@ -98,11 +98,14 @@ export function patchOpenClaw(config: BecomeConfig, agentId?: string): void {
 
   writeFileSync(OPENCLAW_CONFIG, JSON.stringify(clawConfig, null, 2), 'utf-8');
 
-  // Restart gateway
+  // Restart gateway so it picks up the new config
+  console.log('Restarting OpenClaw gateway...');
   try {
     execSync('openclaw gateway restart', { stdio: 'pipe', timeout: 15000 });
+    console.log('OpenClaw gateway restarted. Your agent is now routing through become.');
   } catch {
-    console.log('Warning: Could not restart OpenClaw gateway. Restart it manually: openclaw gateway restart');
+    console.log('\n*** OpenClaw gateway needs a manual restart to pick up the new config. ***');
+    console.log('*** Run: openclaw gateway restart ***\n');
   }
 }
 
@@ -231,9 +234,12 @@ function readStateFile(path: string): string {
 }
 
 function restartGateway(): void {
+  console.log('Restarting OpenClaw gateway...');
   try {
     execSync('openclaw gateway restart', { stdio: 'pipe', timeout: 15000 });
+    console.log('OpenClaw gateway restarted.');
   } catch {
-    console.log('Warning: Could not restart OpenClaw gateway. Restart it manually: openclaw gateway restart');
+    console.log('\n*** OpenClaw gateway needs a manual restart. ***');
+    console.log('*** Run: openclaw gateway restart ***\n');
   }
 }
