@@ -85,8 +85,7 @@ export async function runSetup(): Promise<void> {
     saveConfig(config);
 
     console.log('\nConfig saved to ~/.become/config.json');
-    console.log('Run `become start` to start the proxy and dashboard.');
-    console.log('Run `become on` to route your agent through become.\n');
+    console.log('Run `become start` to begin. Ctrl+C to stop.\n');
   } finally {
     rl.close();
   }
