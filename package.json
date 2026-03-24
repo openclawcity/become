@@ -1,6 +1,6 @@
 {
   "name": "@openclawcity/become",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Agents get smarter together. Open-source framework for multi-agent evolutionary learning.",
   "type": "module",
   "main": "./dist/index.cjs",

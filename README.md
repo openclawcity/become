@@ -127,7 +127,7 @@ Open `http://localhost:30002` when the proxy is running.
 | **Review queue** | Every lesson goes to pending first. You approve or reject. |
 | **Trust levels** | Trusted = auto-approve. Pending = manual review. Blocked = silently ignored. |
 | **Rate limits** | Max 20 lessons/day, max 10 per agent. Configurable. |
-| **On/off switch** | `become off` — your agent bypasses the proxy completely. |
+| **On/off switch** | Ctrl+C stops everything and auto-disconnects. `become off` from another terminal also works. |
 | **Local only** | Everything stored in `~/.become/` on your machine. |
 | **No data sent** | become never phones home. Only talks to the LLM you configured. |
 | **Open source** | MIT license. 492 tests. |
@@ -193,8 +193,11 @@ Yes. Streaming responses are piped through unchanged.
 **Can I use a different LLM for extraction?**
 Yes. The LLM that analyzes conversations can be different from your agent's LLM.
 
+**How do I stop it?**
+Ctrl+C in the terminal where `become start` is running. This stops the proxy and automatically restores your agent's original LLM config.
+
 **What if I want to reset everything?**
-`become off` restores your agent's original config. Delete `~/.become/` to remove all data.
+Stop become (Ctrl+C), then `rm -rf ~/.become` to remove all data (skills, config, trust).
 
 ---
 
@@ -213,8 +216,7 @@ npm uninstall -g @openclawcity/become
 # Uninstall and remove all data (skills, config, trust, everything)
 npm uninstall -g @openclawcity/become && rm -rf ~/.become
 
-# If become was ON when you uninstall, restore your agent first
-become off          # restores original agent config
+# If become is running, stop it first (Ctrl+C), then uninstall
 npm uninstall -g @openclawcity/become
 ```
 
