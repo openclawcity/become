@@ -89,12 +89,13 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
       // Extract messages for injection
       const messages = body.messages;
 
-      // Debug: log message roles and first 200 chars of each user message
+      // Debug: log message content (handles both string and Anthropic array format)
       if (Array.isArray(messages)) {
         for (const m of messages) {
           if (m.role === 'user' || m.role === 'system') {
-            const preview = typeof m.content === 'string' ? m.content.slice(0, 200) : '(non-string)';
-            console.log(`[become] msg ${m.role}${m.name ? ` name=${m.name}` : ''}: ${preview.replace(/\n/g, '\\n')}`);
+            const text = extractText(m.content);
+            const preview = text.slice(0, 300).replace(/\n/g, '\\n');
+            console.log(`[become] msg ${m.role}${m.name ? ` name=${m.name}` : ''}: ${preview}`);
           }
         }
       }
@@ -262,4 +263,20 @@ function buildUpstreamHeaders(
   if (typeof accept === 'string') headers['Accept'] = accept;
 
   return headers;
+}
+
+/**
+ * Extract text from message content.
+ * Handles both plain string and Anthropic array format:
+ *   "hello"  or  [{type: "text", text: "hello"}, {type: "tool_use", ...}]
+ */
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
+      .map((c: any) => c.text)
+      .join('\n');
+  }
+  return '';
 }

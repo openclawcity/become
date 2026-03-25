@@ -19,7 +19,7 @@ export class LessonExtractor {
    * Analyze a conversation and extract lessons. Fire-and-forget.
    */
   async extract(
-    messages: { role: string; content: string; name?: string }[],
+    messages: { role: string; content: unknown; name?: string }[],
   ): Promise<void> {
     const detection = detectAgentConversation(messages);
     if (!detection.isAgentToAgent) return;

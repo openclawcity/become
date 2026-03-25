@@ -24,7 +24,7 @@ const BUILDING_PATTERN = /^([a-zA-Z0-9]+[-_][a-zA-Z0-9_.-]+)\s+in\s+[^:]+:\s*/;
 const REVIEW_KEYWORDS = ['strengths:', 'weaknesses:', 'verdict:', 'assessment:', 'suggestions:'];
 
 export function detectAgentConversation(
-  messages: { role: string; content: string; name?: string }[],
+  messages: { role: string; content: unknown; name?: string }[],
 ): DetectionResult {
   const negative: DetectionResult = { isAgentToAgent: false };
 
@@ -33,7 +33,7 @@ export function detectAgentConversation(
   // Check messages for agent-to-agent patterns
   for (const msg of messages) {
     if (msg.role !== 'user' && msg.role !== 'assistant') continue;
-    const content = typeof msg.content === 'string' ? msg.content : '';
+    const content = contentToString(msg.content);
 
     // Pattern 1: message has a `name` field (multi-agent frameworks)
     if (msg.name && msg.role === 'user') {
@@ -93,15 +93,32 @@ export function detectAgentConversation(
  * Extract agent-to-agent exchange text from messages for analysis.
  */
 export function extractExchangeText(
-  messages: { role: string; content: string; name?: string }[],
+  messages: { role: string; content: unknown; name?: string }[],
 ): string {
   return messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
       const speaker = m.name ?? m.role;
-      const content = typeof m.content === 'string' ? m.content : '';
+      const content = contentToString(m.content);
       return `[${speaker}]: ${content}`;
     })
     .join('\n')
     .slice(0, 6000);
+}
+
+/**
+ * Convert message content to string. Handles:
+ * - Plain string: "hello"
+ * - Anthropic array: [{type: "text", text: "hello"}, {type: "tool_use", ...}]
+ * - Null/undefined: ""
+ */
+function contentToString(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
+      .map((c: any) => c.text)
+      .join('\n');
+  }
+  return '';
 }
