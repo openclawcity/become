@@ -142,8 +142,66 @@ export function restoreOpenClaw(): void {
     }
   }
 
+  // Clean up legacy mess from old become versions (v1.0.1-v1.0.14)
+  // that added a "become" provider and changed model IDs
+  cleanLegacy();
+
   cleanState();
   restartGateway();
+}
+
+/**
+ * Remove artifacts from old become versions that added a "become" provider
+ * and changed model IDs to "become/...". This runs on every restore.
+ */
+function cleanLegacy(): void {
+  // Clean openclaw.json
+  if (existsSync(OPENCLAW_CONFIG)) {
+    try {
+      const config = parseConfig(readFileSync(OPENCLAW_CONFIG, 'utf-8'));
+      let changed = false;
+
+      // Remove become provider
+      if (config.models?.providers?.become) {
+        delete config.models.providers.become;
+        changed = true;
+      }
+
+      // Fix model ID if it starts with become/
+      const primary = config.agents?.defaults?.model?.primary ?? '';
+      if (primary.startsWith('become/')) {
+        config.agents.defaults.model.primary = 'openrouter/' + primary.slice('become/'.length);
+        changed = true;
+      }
+
+      // Remove _originalModel from any provider
+      for (const prov of Object.values(config.models?.providers ?? {})) {
+        if (prov && typeof prov === 'object' && '_originalModel' in prov) {
+          delete (prov as Record<string, unknown>)._originalModel;
+          changed = true;
+        }
+      }
+
+      if (changed) writeFileSync(OPENCLAW_CONFIG, JSON.stringify(config, null, 2), 'utf-8');
+    } catch {}
+  }
+
+  // Clean models.json
+  try {
+    const clawConfig = parseConfig(readFileSync(OPENCLAW_CONFIG, 'utf-8'));
+    const modelsJsonPath = getModelsJsonPath(clawConfig);
+    if (modelsJsonPath && existsSync(modelsJsonPath)) {
+      const models = JSON.parse(readFileSync(modelsJsonPath, 'utf-8'));
+      let changed = false;
+
+      if (models.providers?.become) {
+        delete models.providers.become;
+        changed = true;
+      }
+
+      if (changed) writeFileSync(modelsJsonPath, JSON.stringify(models, null, 2), 'utf-8');
+    }
+  } catch {}
 }
 
 export function listOpenClawAgents(): { id: string; model: string }[] {
