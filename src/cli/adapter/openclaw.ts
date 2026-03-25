@@ -79,9 +79,35 @@ export function patchOpenClaw(config: BecomeConfig): void {
     );
   }
 
-  const originalUrl = provider.baseUrl;
+  let originalUrl = provider.baseUrl;
   if (!originalUrl) {
     throw new Error(`Provider "${providerName}" has no baseUrl`);
+  }
+
+  // If the provider URL already points to localhost, it's already patched
+  // from a previous run. Read the backup to get the real URL.
+  if (originalUrl.includes('127.0.0.1') || originalUrl.includes('localhost')) {
+    // Try to recover from backup
+    if (existsSync(BACKUP_PATH)) {
+      try {
+        const backupRaw = readFileSync(BACKUP_PATH, 'utf-8');
+        // The backup might be openclaw.json or we need models.json backup
+        // For now, just inform the user
+      } catch {}
+    }
+    // Try to read from existing state
+    const savedUrl = readSafe(ORIGINAL_URL_PATH);
+    if (savedUrl && !savedUrl.includes('127.0.0.1')) {
+      originalUrl = savedUrl;
+      console.log(`  recovered original URL from state: ${originalUrl}`);
+    } else {
+      throw new Error(
+        `Provider "${providerName}" baseUrl is already pointing to localhost (${originalUrl}).\n` +
+        'This means become was previously connected but not properly restored.\n' +
+        'Fix manually: set the baseUrl back to the real provider URL in:\n' +
+        `  ${modelsSource === 'models.json' ? getModelsJsonPath(clawConfig) : OPENCLAW_CONFIG}`
+      );
+    }
   }
 
   // Backup

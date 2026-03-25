@@ -45,24 +45,36 @@ export async function start(): Promise<void> {
   };
 
   // Connect agent FIRST so the state file with the original URL exists
-  if (config.state !== 'on') {
-    try {
-      turnOn();
-    } catch (e) {
-      console.error('Warning: could not auto-connect agent:', e instanceof Error ? e.message : e);
+  // Always run turnOn() even if state is 'on', because the state file might be missing
+  try {
+    turnOn();
+  } catch (e) {
+    console.error('Warning: could not connect agent:', e instanceof Error ? e.message : e);
+  }
+
+  // Read the original provider URL (written by turnOn -> patchOpenClaw/IronClaw/NanoClaw)
+  const originalUrlPath = join(homedir(), '.become', 'state', 'original_base_url.txt');
+  let upstreamUrl = config.llm_base_url; // fallback
+  if (existsSync(originalUrlPath)) {
+    const saved = readFileSync(originalUrlPath, 'utf-8').trim();
+    if (saved) upstreamUrl = saved;
+  }
+
+  // SAFETY: never forward to ourselves (infinite loop -> OOM crash)
+  if (upstreamUrl.includes('127.0.0.1') || upstreamUrl.includes('localhost')) {
+    const port = config.proxy_port.toString();
+    if (upstreamUrl.includes(`:${port}`)) {
+      console.error(`\nFATAL: upstream URL ${upstreamUrl} points to the become proxy itself.`);
+      console.error('This would cause an infinite loop. Aborting.');
+      console.error('Run `become off` to restore your config, then `become start` again.\n');
+      process.exit(1);
     }
   }
 
-  // Now read the original provider URL (written by turnOn -> patchOpenClaw)
-  const originalUrlPath = join(homedir(), '.become', 'state', 'original_base_url.txt');
-  let originalUpstreamUrl: string | undefined;
-  if (existsSync(originalUrlPath)) {
-    const saved = readFileSync(originalUrlPath, 'utf-8').trim();
-    if (saved) originalUpstreamUrl = saved;
-  }
+  console.log(`[become] upstream: ${upstreamUrl}`);
 
   const analyzer = createAnalyzer(config);
-  const proxy = createProxyServer(proxyConfig, analyzer, originalUpstreamUrl);
+  const proxy = createProxyServer(proxyConfig, analyzer, upstreamUrl);
   await proxy.listen();
 
   // Start dashboard
