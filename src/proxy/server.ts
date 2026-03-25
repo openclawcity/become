@@ -88,6 +88,17 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
 
       // Extract messages for injection
       const messages = body.messages;
+
+      // Debug: log message roles and first 200 chars of each user message
+      if (Array.isArray(messages)) {
+        for (const m of messages) {
+          if (m.role === 'user' || m.role === 'system') {
+            const preview = typeof m.content === 'string' ? m.content.slice(0, 200) : '(non-string)';
+            console.log(`[become] msg ${m.role}${m.name ? ` name=${m.name}` : ''}: ${preview.replace(/\n/g, '\\n')}`);
+          }
+        }
+      }
+
       if (Array.isArray(messages)) {
         // Inject approved skills from cache
         const skills = getSkills().slice(0, config.max_skills_per_call);
