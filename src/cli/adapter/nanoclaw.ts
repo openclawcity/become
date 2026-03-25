@@ -9,6 +9,7 @@ import type { BecomeConfig } from '../config.js';
 // Source: https://github.com/qwibitai/nanoclaw src/env.ts reads process.cwd()/.env
 const BACKUP_PATH = join(homedir(), '.become', 'state', 'original_nanoclaw.env');
 const PATCHED_ENV_PATH_FILE = join(homedir(), '.become', 'state', 'nanoclaw_env_path.txt');
+const ORIGINAL_URL_PATH = join(homedir(), '.become', 'state', 'original_base_url.txt');
 
 // NanoClaw uses ANTHROPIC_BASE_URL for custom LLM endpoints.
 // It routes everything through a credential proxy (OneCLI) that
@@ -36,6 +37,14 @@ export function patchNanoClaw(config: BecomeConfig): void {
   mkdirSync(join(homedir(), '.become', 'state'), { recursive: true });
   copyFileSync(envPath, BACKUP_PATH);
   writeFileSync(PATCHED_ENV_PATH_FILE, envPath, 'utf-8');
+
+  // Save original URL so the proxy knows where to forward
+  const content = readFileSync(envPath, 'utf-8');
+  const originalMatch = content.match(new RegExp(`^${NANOCLAW_URL_VAR}=(.+)$`, 'm'));
+  const originalUrl = originalMatch?.[1]?.trim() ?? '';
+  if (originalUrl) {
+    writeFileSync(ORIGINAL_URL_PATH, originalUrl, 'utf-8');
+  }
 
   // Patch
   patchDotEnv(envPath, {

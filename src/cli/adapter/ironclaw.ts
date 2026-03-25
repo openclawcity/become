@@ -8,6 +8,7 @@ import type { BecomeConfig } from '../config.js';
 // Source: https://github.com/nearai/ironclaw src/service.rs, .env.example
 const IRONCLAW_ENV = join(process.env.IRONCLAW_BASE_DIR ?? join(homedir(), '.ironclaw'), '.env');
 const BACKUP_PATH = join(homedir(), '.become', 'state', 'original_ironclaw.env');
+const ORIGINAL_URL_PATH = join(homedir(), '.become', 'state', 'original_base_url.txt');
 
 export function patchIronClaw(config: BecomeConfig): void {
   if (!existsSync(IRONCLAW_ENV)) {
@@ -51,6 +52,14 @@ export function patchIronClaw(config: BecomeConfig): void {
       // openai, openai_compatible, openrouter, or any unknown value
       vars['LLM_BASE_URL'] = proxyUrl;
       break;
+  }
+
+  // Save the original URL so the proxy knows where to forward
+  const urlVarName = Object.keys(vars)[0];
+  const originalUrlMatch = content.match(new RegExp(`^${urlVarName}=(.+)$`, 'm'));
+  const originalUrl = originalUrlMatch?.[1]?.trim() ?? '';
+  if (originalUrl) {
+    writeFileSync(ORIGINAL_URL_PATH, originalUrl, 'utf-8');
   }
 
   patchDotEnv(IRONCLAW_ENV, vars);
