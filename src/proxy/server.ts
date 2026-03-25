@@ -108,11 +108,20 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
       const isStreaming = body.stream === true;
       const modifiedBody = JSON.stringify(body);
 
+      console.log(`[become] -> ${upstreamUrl} (${isStreaming ? 'streaming' : 'non-streaming'})`);
+
       const upstreamRes = await fetch(upstreamUrl, {
         method: 'POST',
         headers: upstreamHeaders,
         body: modifiedBody,
       });
+
+      console.log(`[become] <- ${upstreamRes.status} ${upstreamRes.statusText}`);
+
+      if (!upstreamRes.ok) {
+        const errBody = await upstreamRes.text().catch(() => '');
+        console.log(`[become] ERROR: ${errBody.slice(0, 500)}`);
+      }
 
       stats.requests_forwarded++;
 
@@ -157,6 +166,7 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
         }
       }
     } catch (err) {
+      console.log(`[become] EXCEPTION: ${err instanceof Error ? err.message : String(err)}`);
       // Sanitize error — never leak upstream details to client
       const safeMessage = err instanceof Error && err.message === 'Request body too large'
         ? 'Request body too large'
