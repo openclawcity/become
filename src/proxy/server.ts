@@ -162,7 +162,7 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
         // Async extraction — uses request messages only, not the response
         if (config.auto_extract && extractor && Array.isArray(messages)) {
           extractor.extract(messages)
-            .then(() => { stats.lessons_extracted++; })
+            .then(() => { /* extraction attempted, count tracked in extractor logs */ })
             .catch(() => {});
         }
       } else {
@@ -173,7 +173,7 @@ export function createProxyServer(config: ProxyConfig, analyzer?: ConversationAn
         // Async extraction
         if (config.auto_extract && extractor && Array.isArray(messages)) {
           extractor.extract(messages)
-            .then(() => { stats.lessons_extracted++; })
+            .then(() => { /* extraction attempted, count tracked in extractor logs */ })
             .catch(() => {});
         }
       }

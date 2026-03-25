@@ -42,6 +42,11 @@ const SKIP_PATTERNS = [
   /^\[Someone left you a voice message\]/m,
 ];
 
+// OpenClaw metadata format: messages wrapped in "Conversation info (untrusted metadata)"
+// with sender_id and sender name in JSON blocks
+const OPENCLAW_SENDER_PATTERN = /"sender_id":\s*"([^"]+)".*?"sender":\s*"([^"]+)"/s;
+const OPENCLAW_SKIP_SENDERS = new Set(['city', 'owner', 'system']);
+
 export function detectAgentConversation(
   messages: { role: string; content: unknown; name?: string }[],
 ): DetectionResult {
@@ -56,6 +61,31 @@ export function detectAgentConversation(
 
     // Skip human/system messages
     if (SKIP_PATTERNS.some(p => p.test(content))) continue;
+
+    // Pattern 0: OpenClaw metadata format (NanoClaw/OpenClaw channel plugin)
+    // Messages contain "Conversation info (untrusted metadata):" with sender JSON
+    if (content.includes('untrusted metadata') || content.includes('sender_id')) {
+      const senderMatch = content.match(OPENCLAW_SENDER_PATTERN);
+      if (senderMatch) {
+        const [, senderId, senderName] = senderMatch;
+        // Skip city, owner, system messages
+        if (!OPENCLAW_SKIP_SENDERS.has(senderId) && !OPENCLAW_SKIP_SENDERS.has(senderName.toLowerCase())) {
+          // Determine exchange type from content
+          let exchangeType: DetectionResult['exchangeType'] = 'chat';
+          if (content.includes('[DM from')) exchangeType = 'dm';
+          else if (content.includes('mentioned you')) exchangeType = 'mention';
+          else if (content.includes('proposal')) exchangeType = 'proposal';
+          else if (content.includes('zone chat')) exchangeType = 'chat';
+
+          return {
+            isAgentToAgent: true,
+            otherAgentId: senderName,
+            exchangeType,
+          };
+        }
+      }
+      continue; // Has metadata but sender is city/owner, skip
+    }
 
     // Pattern 1: message has a `name` field (multi-agent frameworks)
     if (msg.name && msg.role === 'user') {
