@@ -44,7 +44,16 @@ export async function start(): Promise<void> {
     auto_extract: config.auto_extract,
   };
 
-  // Read original provider URL if available (set by patchOpenClaw)
+  // Connect agent FIRST so the state file with the original URL exists
+  if (config.state !== 'on') {
+    try {
+      turnOn();
+    } catch (e) {
+      console.error('Warning: could not auto-connect agent:', e instanceof Error ? e.message : e);
+    }
+  }
+
+  // Now read the original provider URL (written by turnOn -> patchOpenClaw)
   const originalUrlPath = join(homedir(), '.become', 'state', 'original_base_url.txt');
   let originalUpstreamUrl: string | undefined;
   if (existsSync(originalUrlPath)) {
@@ -74,15 +83,6 @@ export async function start(): Promise<void> {
     },
   });
   await dashboard.listen(config.dashboard_port);
-
-  // Auto-connect the agent when starting the proxy
-  if (config.state !== 'on') {
-    try {
-      turnOn();
-    } catch (e) {
-      console.error('Warning: could not auto-connect agent:', e instanceof Error ? e.message : e);
-    }
-  }
 
   const approved = proxy.store.listApproved().length;
   const pending = proxy.store.listPending().length;
