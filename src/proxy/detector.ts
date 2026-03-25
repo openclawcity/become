@@ -6,22 +6,41 @@
 export interface DetectionResult {
   isAgentToAgent: boolean;
   otherAgentId?: string;
-  exchangeType?: 'channel' | 'dm' | 'peer_review' | 'collaboration' | 'chat';
+  exchangeType?: 'channel' | 'dm' | 'peer_review' | 'collaboration' | 'chat' | 'mention' | 'proposal';
 }
 
-// OpenClawCity channel format: [agent-name says]: ...
-const CHANNEL_PATTERN = /^\[([^\]]+)\s+says?\]:\s*/;
+// OpenClawCity event formats (from nanoclaw-openclawcity plugin formatEventForAgent):
+// [DM from AgentName]:
+// [AgentName mentioned you in building chat]:
+// [AgentName in zone chat]:
+// [AgentName sent you a proposal]:
+// [AgentName accepted your proposal]:
+// [AgentName wants to start a conversation with you]:
+// Display names have [ replaced with ( and ] with ) to avoid breaking the format.
 
-// DM format: DM from agent-name: ...
-const DM_PATTERN = /^DM\s+from\s+([^:]+):\s*/;
+const OCC_DM_PATTERN = /^\[DM from ([^\]]+)\]:/m;
+const OCC_MENTION_PATTERN = /^\[([^\]]+) mentioned you in building chat\]:/m;
+const OCC_ZONE_CHAT_PATTERN = /^\[([^\]]+) in zone chat\]:/m;
+const OCC_PROPOSAL_PATTERN = /^\[([^\]]+) (?:sent you a proposal|accepted your proposal)\]:/m;
+const OCC_CONVERSATION_REQUEST = /^\[([^\]]+) wants to start a conversation with you\]:/m;
+
+// Generic patterns (non-OpenClawCity)
+const GENERIC_CHANNEL_PATTERN = /^\[([^\]]+)\s+says?\]:\s*/m;
+const GENERIC_DM_PATTERN = /^DM\s+from\s+([^:]+):\s*/m;
 
 // Agent in building: agent-name in Building Name: ...
-// Requires agent-like ID (contains hyphen or underscore) to avoid false positives
-// like "Write code in Python: ..."
-const BUILDING_PATTERN = /^([a-zA-Z0-9]+[-_][a-zA-Z0-9_.-]+)\s+in\s+[^:]+:\s*/;
+const BUILDING_PATTERN = /^([a-zA-Z0-9]+[-_][a-zA-Z0-9_.-]+)\s+in\s+[^:]+:\s*/m;
 
 // Peer review markers
 const REVIEW_KEYWORDS = ['strengths:', 'weaknesses:', 'verdict:', 'assessment:', 'suggestions:'];
+
+// Skip these (human/system messages, not agent-to-agent)
+const SKIP_PATTERNS = [
+  /^\[Your human owner says\]:/m,
+  /^\[Your human set a new mission/m,
+  /^\[HEARTBEAT/m,
+  /^\[Someone left you a voice message\]/m,
+];
 
 export function detectAgentConversation(
   messages: { role: string; content: unknown; name?: string }[],
@@ -30,10 +49,13 @@ export function detectAgentConversation(
 
   if (!messages || messages.length === 0) return negative;
 
-  // Check messages for agent-to-agent patterns
   for (const msg of messages) {
     if (msg.role !== 'user' && msg.role !== 'assistant') continue;
     const content = contentToString(msg.content);
+    if (!content) continue;
+
+    // Skip human/system messages
+    if (SKIP_PATTERNS.some(p => p.test(content))) continue;
 
     // Pattern 1: message has a `name` field (multi-agent frameworks)
     if (msg.name && msg.role === 'user') {
@@ -44,18 +66,8 @@ export function detectAgentConversation(
       };
     }
 
-    // Pattern 2: OpenClawCity channel format
-    const channelMatch = content.match(CHANNEL_PATTERN);
-    if (channelMatch) {
-      return {
-        isAgentToAgent: true,
-        otherAgentId: channelMatch[1].trim(),
-        exchangeType: 'channel',
-      };
-    }
-
-    // Pattern 3: DM format
-    const dmMatch = content.match(DM_PATTERN);
+    // Pattern 2: OpenClawCity DM
+    const dmMatch = content.match(OCC_DM_PATTERN);
     if (dmMatch) {
       return {
         isAgentToAgent: true,
@@ -64,7 +76,67 @@ export function detectAgentConversation(
       };
     }
 
-    // Pattern 4: Building format
+    // Pattern 3: OpenClawCity mention in building chat
+    const mentionMatch = content.match(OCC_MENTION_PATTERN);
+    if (mentionMatch) {
+      return {
+        isAgentToAgent: true,
+        otherAgentId: mentionMatch[1].trim(),
+        exchangeType: 'mention',
+      };
+    }
+
+    // Pattern 4: OpenClawCity zone chat
+    const zoneMatch = content.match(OCC_ZONE_CHAT_PATTERN);
+    if (zoneMatch) {
+      return {
+        isAgentToAgent: true,
+        otherAgentId: zoneMatch[1].trim(),
+        exchangeType: 'chat',
+      };
+    }
+
+    // Pattern 5: OpenClawCity proposal
+    const proposalMatch = content.match(OCC_PROPOSAL_PATTERN);
+    if (proposalMatch) {
+      return {
+        isAgentToAgent: true,
+        otherAgentId: proposalMatch[1].trim(),
+        exchangeType: 'proposal',
+      };
+    }
+
+    // Pattern 6: OpenClawCity conversation request
+    const convMatch = content.match(OCC_CONVERSATION_REQUEST);
+    if (convMatch) {
+      return {
+        isAgentToAgent: true,
+        otherAgentId: convMatch[1].trim(),
+        exchangeType: 'dm',
+      };
+    }
+
+    // Pattern 7: Generic channel format [name says]:
+    const channelMatch = content.match(GENERIC_CHANNEL_PATTERN);
+    if (channelMatch) {
+      return {
+        isAgentToAgent: true,
+        otherAgentId: channelMatch[1].trim(),
+        exchangeType: 'channel',
+      };
+    }
+
+    // Pattern 8: Generic DM format
+    const genericDmMatch = content.match(GENERIC_DM_PATTERN);
+    if (genericDmMatch) {
+      return {
+        isAgentToAgent: true,
+        otherAgentId: genericDmMatch[1].trim(),
+        exchangeType: 'dm',
+      };
+    }
+
+    // Pattern 9: Building format
     const buildingMatch = content.match(BUILDING_PATTERN);
     if (buildingMatch) {
       return {
@@ -74,7 +146,7 @@ export function detectAgentConversation(
       };
     }
 
-    // Pattern 5: Peer review content
+    // Pattern 10: Peer review content
     const lowerContent = content.toLowerCase();
     const reviewMatches = REVIEW_KEYWORDS.filter((kw) => lowerContent.includes(kw));
     if (reviewMatches.length >= 2) {
@@ -110,7 +182,6 @@ export function extractExchangeText(
  * Convert message content to string. Handles:
  * - Plain string: "hello"
  * - Anthropic array: [{type: "text", text: "hello"}, {type: "tool_use", ...}]
- * - Null/undefined: ""
  */
 function contentToString(content: unknown): string {
   if (typeof content === 'string') return content;
