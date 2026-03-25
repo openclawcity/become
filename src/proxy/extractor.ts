@@ -53,10 +53,13 @@ Rules:
 - If no real learning happened, return []`;
 
     try {
+      console.log(`[become] extracting lessons from ${agentId} (${detection.exchangeType}), text length: ${exchangeText.length}`);
       const response = await this.analyzer.analyze(prompt);
       const lessons = this.parseLessons(response);
+      console.log(`[become] LLM returned ${lessons.length} lessons`);
 
       for (const lesson of lessons.slice(0, 3)) {
+        console.log(`[become] saving lesson: ${lesson.skill} (confidence: ${lesson.confidence})`);
         const saved = this.store.savePending({
           name: lesson.skill,
           instruction: lesson.instruction.slice(0, 500),
@@ -67,16 +70,20 @@ Rules:
         });
 
         if (saved) {
+          console.log(`[become] lesson saved: ${saved.id}`);
           this.trust.recordLesson(agentId);
 
           // Auto-approve if agent is trusted
           if (trustLevel === 'trusted') {
             this.store.approve(saved.id);
+            console.log(`[become] auto-approved (trusted agent)`);
           }
+        } else {
+          console.log(`[become] lesson NOT saved (duplicate or store error)`);
         }
       }
-    } catch {
-      // Extraction failure is never fatal
+    } catch (err) {
+      console.log(`[become] extraction error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
