@@ -127,4 +127,80 @@ describe('extractExchangeText', () => {
     const text = extractExchangeText([{ role: 'user', content: longMsg }]);
     expect(text.length).toBeLessThanOrEqual(6000);
   });
+
+  it('with otherAgentId, returns only the last agent message + assistant reply', () => {
+    const text = extractExchangeText([
+      { role: 'user', content: '[HEARTBEAT] You are an agent in OpenClawCity. Check your surroundings...' },
+      { role: 'assistant', content: 'I will explore the plaza and look for collaborators.' },
+      { role: 'user', content: '[Your human owner says]: focus on music' },
+      { role: 'assistant', content: 'Understood, I will prioritize music creation.' },
+      { role: 'user', content: '[DM from agent-melody]: Try using pentatonic scales for ambient tracks' },
+      { role: 'assistant', content: 'Great tip! I will experiment with pentatonic patterns.' },
+    ], 'agent-melody');
+
+    // Should contain only the relevant exchange
+    expect(text).toContain('agent-melody');
+    expect(text).toContain('pentatonic scales');
+    expect(text).toContain('Great tip');
+
+    // Should NOT contain heartbeat or owner messages
+    expect(text).not.toContain('HEARTBEAT');
+    expect(text).not.toContain('human owner');
+    expect(text).not.toContain('explore the plaza');
+  });
+
+  it('with otherAgentId, matches by name field', () => {
+    const text = extractExchangeText([
+      { role: 'user', content: 'Some system context' },
+      { role: 'assistant', content: 'Acknowledged' },
+      { role: 'user', content: 'Use IEEE format for citations', name: 'agent-scholar' },
+      { role: 'assistant', content: 'I will adopt IEEE format.' },
+    ], 'agent-scholar');
+
+    expect(text).toContain('IEEE format');
+    expect(text).toContain('adopt IEEE');
+    expect(text).not.toContain('system context');
+  });
+
+  it('with otherAgentId, falls back to full conversation when agent not found', () => {
+    const text = extractExchangeText([
+      { role: 'user', content: 'Hello from user' },
+      { role: 'assistant', content: 'Hello back' },
+    ], 'agent-nonexistent');
+
+    // Falls back to full conversation
+    expect(text).toContain('[user]: Hello from user');
+    expect(text).toContain('[assistant]: Hello back');
+  });
+
+  it('without otherAgentId, returns full conversation (backward compatible)', () => {
+    const text = extractExchangeText([
+      { role: 'user', content: '[HEARTBEAT] context' },
+      { role: 'assistant', content: 'response 1' },
+      { role: 'user', content: '[agent-xyz says]: teach me' },
+      { role: 'assistant', content: 'response 2' },
+    ]);
+
+    // Full conversation included
+    expect(text).toContain('HEARTBEAT');
+    expect(text).toContain('response 1');
+    expect(text).toContain('agent-xyz');
+    expect(text).toContain('response 2');
+  });
+
+  it('with otherAgentId, picks last occurrence when agent appears multiple times', () => {
+    const text = extractExchangeText([
+      { role: 'user', content: '[agent-xyz says]: first message' },
+      { role: 'assistant', content: 'first reply' },
+      { role: 'user', content: '[agent-xyz says]: second message' },
+      { role: 'assistant', content: 'second reply' },
+    ], 'agent-xyz');
+
+    // Should have the second (last) exchange
+    expect(text).toContain('second message');
+    expect(text).toContain('second reply');
+    // Should NOT have the first exchange
+    expect(text).not.toContain('first message');
+    expect(text).not.toContain('first reply');
+  });
 });

@@ -33,7 +33,7 @@ export class LessonExtractor {
     // Check rate limits
     if (!this.trust.canLearn(agentId)) return;
 
-    const exchangeText = extractExchangeText(messages);
+    const exchangeText = extractExchangeText(messages, agentId !== 'unknown-agent' ? agentId : undefined);
     if (exchangeText.length < 20) return;
 
     const prompt = `Analyze this conversation between an AI agent and another agent. Extract concrete, actionable lessons that the first agent (the "assistant") can learn from the other agent.

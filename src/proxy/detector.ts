@@ -193,12 +193,50 @@ export function detectAgentConversation(
 
 /**
  * Extract agent-to-agent exchange text from messages for analysis.
+ *
+ * When `otherAgentId` is provided, only returns the last message from that
+ * agent and the assistant's reply — filtering out heartbeat instructions,
+ * city context, owner messages, and other noise that would confuse the LLM.
+ *
+ * Falls back to full conversation (capped at 6000 chars) when no agent ID
+ * is available (e.g. peer_review detection without a named sender).
  */
 export function extractExchangeText(
   messages: { role: string; content: unknown; name?: string }[],
+  otherAgentId?: string,
 ): string {
-  return messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
+  const relevant = messages.filter((m) => m.role === 'user' || m.role === 'assistant');
+
+  if (otherAgentId) {
+    // Find the last user message that contains content from the other agent
+    let lastAgentMsgIndex = -1;
+    for (let i = relevant.length - 1; i >= 0; i--) {
+      const msg = relevant[i];
+      if (msg.role !== 'user') continue;
+      const text = contentToString(msg.content);
+      // Match by name field or by content containing the agent's identifier
+      if (msg.name === otherAgentId || text.includes(otherAgentId)) {
+        lastAgentMsgIndex = i;
+        break;
+      }
+    }
+
+    if (lastAgentMsgIndex >= 0) {
+      // Take the agent's message and the assistant's response (if any)
+      const slice = relevant.slice(lastAgentMsgIndex, lastAgentMsgIndex + 2);
+      return slice
+        .map((m) => {
+          const speaker = m.name ?? m.role;
+          const content = contentToString(m.content);
+          return `[${speaker}]: ${content}`;
+        })
+        .join('\n')
+        .slice(0, 6000);
+    }
+  }
+
+  // Fallback: return full conversation (original behavior)
+  return relevant
     .map((m) => {
       const speaker = m.name ?? m.role;
       const content = contentToString(m.content);
