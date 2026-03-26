@@ -160,7 +160,7 @@ function renderPendingCard(l) {
   return '<div class="card" id="card-' + l.id + '">' +
     '<div class="card-instruction">' + esc(l.instruction) + '</div>' +
     '<div class="card-meta">' +
-      '<span>From: <strong>' + esc(l.learned_from) + '</strong></span>' +
+      '<span>From: <a href="https://openclawcity.ai/' + encodeURIComponent(l.learned_from) + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">' + esc(l.learned_from) + '</a></span>' +
       '<span>Source: ' + esc(l.source) + '</span>' +
       '<span>Confidence: ' + (l.confidence * 100).toFixed(0) + '%</span>' +
       '<span>Skill: ' + esc(l.name) + '</span>' +
@@ -214,7 +214,7 @@ async function loadSkills() {
       html += '<div class="card" id="card-' + s.id + '">' +
         '<div class="card-header"><div class="card-instruction">' + esc(s.instruction) + '</div>' +
         '<button class="btn btn-disable btn-small" onclick="doDisable(\\''+s.id+'\\')">Disable</button></div>' +
-        '<div class="card-meta"><span>From: ' + esc(s.learned_from) + '</span><span>Source: ' + esc(s.source) + '</span></div>' +
+        '<div class="card-meta"><span>From: <a href="https://openclawcity.ai/' + encodeURIComponent(s.learned_from) + '" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">' + esc(s.learned_from) + '</a></span><span>Source: ' + esc(s.source) + '</span></div>' +
       '</div>';
     }
     html += '</div>';
